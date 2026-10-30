@@ -20,7 +20,7 @@ export default function PrivacyPage() {
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
       <p className="notice">
-        <strong>The short version:</strong> we collect what&rsquo;s needed to run your account, portfolio and chat. We
+        <strong>The short version:</strong> we collect what&rsquo;s needed to run your account, portfolio, chat and forum. We
         don&rsquo;t sell your personal information or share it for targeted advertising. You can download or delete
         your data at any time from your <Link href="/account">account page</Link>.
       </p>
@@ -47,8 +47,8 @@ export default function PrivacyPage() {
             <td>To show and value your portfolio and send your alerts</td>
           </tr>
           <tr>
-            <td>Chat name, chat messages, reports you make, people you mute</td>
-            <td>To run chat, keep it free of scams, and handle reports</td>
+            <td>Public name, bio, chat messages, forum posts, helpful votes, reputation, reports you make, people you mute</td>
+            <td>To run chat and the forum, show public profiles, keep them free of scams, and handle reports</td>
           </tr>
           <tr>
             <td>Notification address for each device you turn alerts on for</td>
@@ -87,14 +87,14 @@ export default function PrivacyPage() {
         <li>Google, if you choose to sign in with Google</li>
       </ul>
       <p>
-        Chat messages and your chat name are public to everyone who opens that room. We may also disclose information
+        Chat messages and your chat name are public to everyone who opens that room. Forum posts, your bio, reputation and profile page are public to everyone, and search engines may index forum topics and established members&rsquo; profiles. We may also disclose information
         if the law requires it, or to protect people from fraud or harm.
       </p>
 
       <h2>How long we keep it</h2>
       <p>
         We keep your account data until you delete your account. Deleting it erases your account, watchlist,
-        portfolio, alerts and chat messages straight away; any copies in backups expire within 30 days. Server logs
+        portfolio, alerts, chat messages and forum posts straight away; any copies in backups expire within 30 days. Server logs
         are overwritten as they fill up, usually within a few weeks.
       </p>
 
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
       <ul>
         <li><strong>See and download your data:</strong> <Link href="/account">Account</Link> &gt; Download my data.</li>
         <li><strong>Delete your account and data:</strong> <Link href="/account">Account</Link> &gt; Delete account.</li>
-        <li><strong>Correct it:</strong> change your chat name and password in your account, or email us.</li>
+        <li><strong>Correct it:</strong> change your public name, bio and password in your account, edit a forum post in its first hour, or email us.</li>
         <li><strong>Object or restrict</strong> how we use it, or <strong>withdraw consent</strong> to optional cookies, in{" "}
           <Link href="/privacy-choices">Privacy choices</Link> or by email.</li>
       </ul>

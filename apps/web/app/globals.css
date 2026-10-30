@@ -1389,3 +1389,228 @@ table.market {
 .cookie-banner a {
   color: var(--accent);
 }
+
+/* Forum and profiles (Phase 5) */
+
+.forum .pager,
+.topic .pager {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.category-grid {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 24px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.category-card:hover {
+  border-color: var(--accent);
+}
+
+.forum-cols {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 960px) {
+  .forum-cols {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+}
+
+.forum-cols h2 {
+  margin-top: 0;
+}
+
+.topic-list,
+.profile-posts,
+.members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.topic-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.topic-main {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.topic-title {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.topic-stats {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.members li {
+  padding: 4px 0;
+}
+
+.author {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.level {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.level-trusted {
+  color: var(--up);
+  border-color: currentColor;
+}
+
+.level-veteran {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.post {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  scroll-margin-top: 80px;
+}
+
+.post:target {
+  border-color: var(--accent);
+}
+
+.post.held {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+}
+
+.post-text {
+  overflow-wrap: anywhere;
+}
+
+.post-text p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+
+.post-text a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.helpful.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.replies-head {
+  margin: 24px 0 12px;
+  font-size: 1.05rem;
+}
+
+.reply-form {
+  margin-top: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.tabs a[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.profile-posts li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-posts p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.small-head {
+  font-size: 0.9rem;
+  margin: 16px 0 8px;
+}
+
+.stress tr.on td {
+  background: var(--surface);
+}
+
+.profile h1 .chat-name {
+  font-size: inherit;
+}
+
+.author .chat-name {
+  font-weight: 600;
+}

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CHAT_LIMITS } from "@midbig/shared";
+import { CHAT_LIMITS, FORUM_LIMITS, REP_POINTS, TRUSTED_MIN_AGE_MS, TRUSTED_MIN_REP } from "@midbig/shared";
 import { CONTACT_EMAIL, LEGAL_UPDATED } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Community rules",
-  description: "How midbig chat works: what's allowed, what gets held for a moderator, and how to report scams.",
+  description: "How midbig chat and the forum work: what's allowed, what gets held for a moderator, reputation, and how to report scams.",
   alternates: { canonical: "/rules" },
 };
 
@@ -55,11 +55,39 @@ export default function RulesPage() {
         <li>Moderators remove messages that break these rules and can pause or ban accounts from chat.</li>
       </ul>
 
+      <h2>The forum</h2>
+      <ul>
+        <li>The same rules and the same scam filter apply to forum posts, titles and profile bios. Bios can&rsquo;t
+          contain links or contact details.</li>
+        <li>Share reasoning, not signals. &ldquo;I think X because Y&rdquo; is welcome; &ldquo;buy X now&rdquo;, paid
+          groups and copy-trading offers are not.</li>
+        <li>You can start a topic every {FORUM_LIMITS.topicGapMs / 60_000} minutes and reply every{" "}
+          {FORUM_LIMITS.replyGapMs / 1000} seconds, and fix your posts during their first hour. A changed post goes
+          through the filter again.</li>
+        <li>Moderators can pin and lock topics. Banning someone pauses both chat and the forum and removes what they
+          posted in the last day.</li>
+      </ul>
+
+      <h2 id="reputation">Reputation</h2>
+      <ul>
+        <li>Press <strong>👍 Helpful</strong> on posts that taught you something. Each vote from someone else earns
+          the author {REP_POINTS.helpful} point; each post a moderator removes costs {Math.abs(REP_POINTS.removed)}.
+          Accounts can vote after their first day.</li>
+        <li>Levels: Member from 10 points, Trusted from {TRUSTED_MIN_REP} (with an account at least{" "}
+          {TRUSTED_MIN_AGE_MS / 86_400_000} days old), Veteran from 250.</li>
+        <li>Trusted members can link to sites off our allow list without waiting for a moderator, and their reports
+          count double.</li>
+        <li>Reputation measures how helpful someone&rsquo;s posts have been, not whether their trades make money. It
+          is never a reason to follow anyone&rsquo;s calls.</li>
+        <li>Trading votes, voting rings and extra accounts break these rules; moderators reset reputation built that
+          way.</li>
+      </ul>
+
       <h2>Appeals and takedowns</h2>
       <p>
         If you think a moderator got it wrong, or you want something you or someone else posted taken down (for
         example, it shares your personal details or infringes your copyright), email{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> with a link to the room, the time, and what&rsquo;s
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> with a link to the room or post, the time, and what&rsquo;s
         wrong. We aim to reply within 7 days. See the <Link href="/terms">Terms</Link> for more.
       </p>
     </article>

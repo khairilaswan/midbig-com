@@ -7,7 +7,7 @@ import { getAssetRows, getTxns } from "@/lib/user-data";
 export const metadata: Metadata = {
   title: "What-if simulator: what if Bitcoin or the stock market drops?",
   description:
-    "See what your crypto and stocks would be worth if Bitcoin dropped to $70k or the S&P 500 fell 20%, with each holding moving by its beta. Free, no account needed.",
+    "See what your crypto and stocks would be worth if Bitcoin dropped to $70k, the S&P 500 fell 20%, or the 2020 crash or 2022 crypto winter happened again. Free, no account needed.",
   alternates: { canonical: "/what-if" },
 };
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export default async function WhatIfPage() {
       <p className="lede">
         Pick a scenario and see what your crypto and stocks would be worth. Coins move with Bitcoin by their beta: how
         much each one has moved for every 1% Bitcoin moved over the last 90 days. Stocks move with the S&amp;P 500 by
-        their published beta.
+        their published beta. The stress test replays past crashes, from the dot-com bust to FTX, on what you hold today.
       </p>
       <Simulator initial={initial} coins={coins} fromPortfolio={holdings.length > 0} />
     </>

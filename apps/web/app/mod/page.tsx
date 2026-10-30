@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { canModerate, getViewer, listBans, listStaff, moderationQueue, moderationStats } from "@/lib/chat";
-import { BanList, ModQueue, StaffList } from "@/components/mod-tools";
+import { BanList, ForumQueue, ModQueue, StaffList } from "@/components/mod-tools";
+import { forumQueue } from "@/lib/forum";
 
 export const metadata: Metadata = { title: "Moderation", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -25,8 +26,9 @@ export default async function ModPage() {
     );
   }
 
-  const [queue, stats, bans, staff] = await Promise.all([
+  const [queue, forum, stats, bans, staff] = await Promise.all([
     moderationQueue(),
+    forumQueue(),
     moderationStats(),
     listBans(),
     viewer.role === "admin" ? listStaff() : Promise.resolve(null),
@@ -44,6 +46,7 @@ export default async function ModPage() {
             )}%); ${stats.reportedFirst} needed a report first.`}
       </p>
       <ModQueue items={queue} />
+      <ForumQueue items={forum} />
       <BanList bans={bans} />
       {staff && <StaffList staff={staff} />}
     </div>

@@ -179,6 +179,10 @@ export interface FilterContext {
   canPostLinks: boolean;
   /** Moderators and admins: skips the impersonation and link checks. */
   isStaff?: boolean;
+  /** Members with a good track record: links to sites off the allow list aren't held. */
+  trustedLinks?: boolean;
+  /** Longest body allowed; chat's limit unless given (forum posts are longer). */
+  maxLength?: number;
 }
 
 /** Links to these sites (and their subdomains) are posted straight away. */
@@ -351,8 +355,9 @@ const HYPE_EMOJI_RE = /🚀|🌕|🌙|💎|🔥|💰|🤑|📈|💸/gu;
  */
 export function checkMessage(body: string, ctx: FilterContext): FilterResult {
   if (body.length === 0) return { action: "reject", message: "Type a message first." };
-  if (body.length > CHAT_MAX_LENGTH) {
-    return { action: "reject", message: `Keep messages under ${CHAT_MAX_LENGTH} characters.` };
+  const max = ctx.maxLength ?? CHAT_MAX_LENGTH;
+  if (body.length > max) {
+    return { action: "reject", message: `Keep it under ${max.toLocaleString("en-US")} characters.` };
   }
   if (/(.)\1{14,}/su.test(body) || /\b(\w+)\b(?:\W+\1\b){7,}/i.test(body)) {
     return { action: "reject", message: "That looks like spam. Please write a normal message." };
@@ -386,7 +391,7 @@ export function checkMessage(body: string, ctx: FilterContext): FilterResult {
     else if (SHORTENERS.some((d) => onDomain(host, d))) reasons.add("link-shortener");
     else if (ALLOWED_DOMAINS.some((d) => onDomain(host, d))) plainLink = true;
     else if (BRANDS.some((b) => host.replace(/[^a-z0-9]/g, "").includes(b))) reasons.add("lookalike-domain");
-    else if (ctx.isStaff) plainLink = true;
+    else if (ctx.isStaff || ctx.trustedLinks) plainLink = true;
     else {
       plainLink = true;
       if (ctx.canPostLinks) reasons.add("unknown-link");
