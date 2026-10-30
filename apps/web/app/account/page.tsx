@@ -33,6 +33,12 @@ export default async function AccountPage() {
       {viewer?.isStaff && (
         <p className="notice">
           You&rsquo;re {viewer.role === "admin" ? "an admin" : "a moderator"}. <Link href="/mod">Open the moderation queue</Link>
+          {viewer.role === "admin" && (
+            <>
+              {" · "}
+              <Link href="/admin">Admin portal</Link>
+            </>
+          )}
         </p>
       )}
 

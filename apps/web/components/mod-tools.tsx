@@ -13,7 +13,8 @@ import type { ForumQueueItem } from "@/lib/types";
 function roomLink(room: string) {
   const r = parseRoom(room);
   if (!r) return room;
-  return r.kind === "global" ? <Link href="/chat">Everyone</Link> : <Link href={assetPath(r.assetId)}>{r.assetId}</Link>;
+  if (r.kind === "global") return <Link href="/chat">Everyone</Link>;
+  return r.kind === "coin" ? <Link href={assetPath(r.assetId)}>{r.assetId}</Link> : <span>community #{r.communityId}</span>;
 }
 
 function ago(ms: number): string {
@@ -119,7 +120,7 @@ export function ForumQueue({ items }: { items: ForumQueueItem[] }) {
               <strong>{p.author.name}</strong>
               <span className="muted">
                 joined {ago(p.authorJoined)} ago · {p.authorPosts} posts · rep {p.author.reputation} ·{" "}
-                {p.isFirst ? "new topic" : "reply in"} <Link href={`${p.topicPath}#p${p.id}`}>{p.topicTitle}</Link> ·{" "}
+                {p.isFirst ? "new topic" : "comment in"} <Link href={`${p.topicPath}#p${p.id}`}>{p.topicTitle}</Link> ({p.communityLabel}) ·{" "}
                 {new Date(p.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
               </span>
             </div>

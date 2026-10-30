@@ -9,7 +9,9 @@ import { PriceChart } from "@/components/price-chart";
 import { WatchButton } from "@/components/watch-button";
 import { getSession } from "@/lib/auth";
 import { getAsset } from "@/lib/server";
-import { listTopics } from "@/lib/forum";
+import { communityForAsset } from "@/lib/communities";
+import { forumViewer, listTopics } from "@/lib/forum";
+import { classEnabled } from "@/lib/settings";
 import { isWatched } from "@/lib/user-data";
 
 export const dynamic = "force-dynamic";
@@ -36,10 +38,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ForexPairPage({ params }: Props) {
   const [asset, session] = await Promise.all([load((await params).pair), getSession()]);
   if (!asset) notFound();
-  const [watched, discussions] = await Promise.all([
+  if (!(await classEnabled("forex"))) notFound();
+  const [watched, community, { me }] = await Promise.all([
     session ? isWatched(session.user.id, asset.id) : false,
-    listTopics({ assetId: asset.id, limit: 5 }),
+    communityForAsset(asset.id),
+    forumViewer(),
   ]);
+  const discussions = community
+    ? await listTopics({ communityId: community.id, limit: 5, viewerId: session?.user.id })
+    : { topics: [] };
 
   return (
     <article className="coin">
@@ -55,7 +62,7 @@ export default async function ForexPairPage({ params }: Props) {
       </div>
       <PriceChart id={asset.id} initialLive={asset.live} />
       <ChatRoom room={coinRoom(asset.id)} title={`${asset.symbol} chat`} />
-      <AssetDiscussions topics={discussions.topics} asset={asset} />
+      <AssetDiscussions topics={discussions.topics} me={me} community={community} asset={asset} />
       <section className="about">
         <h2>About the {asset.symbol} rate</h2>
         <p>

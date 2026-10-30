@@ -2,20 +2,23 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { REPORT_REASONS, type ReportReason } from "@midbig/shared";
+import { isStance, REPORT_REASONS, type ReportReason, type Stance } from "@midbig/shared";
 import { getSession } from "@/lib/auth";
 import { canModerate, getViewer, type Viewer } from "@/lib/chat";
+import { canModerateCommunity, logAction } from "@/lib/communities";
 import {
   approvePosts,
   createReply,
   createTopic,
   deleteOwnPost,
   editPost,
+  postCommunity,
   removePosts,
   reportPost,
   setBio,
-  setHelpful,
   setTopicFlag,
+  topicCommunity,
+  vote,
   type WriteResult,
 } from "@/lib/forum";
 import type { ActionResult } from "./actions";
@@ -70,18 +73,19 @@ async function write(fn: () => Promise<WriteResult>): Promise<WriteResult> {
 }
 
 export async function startTopic(input: {
-  category: string;
-  assetId?: string | null;
+  communityId: string;
   title: string;
   body: string;
+  stance?: Stance | null;
   captcha?: string;
 }): Promise<WriteResult> {
   return write(async () => {
+    if (!validId(input.communityId)) return { ok: false, error: "Pick a community to post in." };
     const r = await createTopic(await viewerOrNull(), {
-      category: String(input.category ?? ""),
-      assetId: input.assetId ? String(input.assetId) : null,
+      communityId: input.communityId,
       title: String(input.title ?? ""),
       body: String(input.body ?? ""),
+      stance: isStance(input.stance) ? input.stance : null,
       captcha: typeof input.captcha === "string" ? input.captcha : undefined,
       ip: await clientIp(),
     });
@@ -90,11 +94,12 @@ export async function startTopic(input: {
   });
 }
 
-export async function postReply(input: { topicId: string; body: string; captcha?: string }): Promise<WriteResult> {
+export async function postReply(input: { topicId: string; parentId?: string | null; body: string; captcha?: string }): Promise<WriteResult> {
   return write(async () => {
     if (!validId(input.topicId)) return { ok: false, error: "That topic is gone." };
     return createReply(await viewerOrNull(), {
       topicId: input.topicId,
+      parentId: validId(input.parentId) ? input.parentId : null,
       body: String(input.body ?? ""),
       captcha: typeof input.captcha === "string" ? input.captcha : undefined,
       ip: await clientIp(),
@@ -116,10 +121,11 @@ export async function deletePost(postId: string): Promise<ActionResult> {
   });
 }
 
-export async function voteHelpful(postId: string, on: boolean): Promise<ActionResult> {
+export async function castVote(postId: string, value: number): Promise<ActionResult> {
   return attempt(async () => {
     if (!validId(postId)) return "That post is gone.";
-    return setHelpful(await viewer(), postId, Boolean(on));
+    if (value !== 1 && value !== -1 && value !== 0) return "Pick up or down.";
+    return vote(await viewer(), postId, value);
   });
 }
 
@@ -149,10 +155,24 @@ export async function modForumRemove(postIds: string[]): Promise<ActionResult> {
   });
 }
 
+/** Site moderators, or this community's own moderators, remove one post. */
+export async function communityRemove(postId: string): Promise<ActionResult> {
+  return attempt(async () => {
+    const v = await viewer();
+    const communityId = validId(postId) ? await postCommunity(postId) : null;
+    if (!communityId) return "That post is gone.";
+    if (!(await canModerateCommunity(v, communityId))) return NOT_MOD;
+    await removePosts(v, [postId]);
+    if (!canModerate(v)) await logAction(v, "post.remove", postId, { communityId });
+  });
+}
+
 export async function modTopicFlag(topicId: string, flag: "pinned" | "locked", value: boolean): Promise<ActionResult> {
   return attempt(async () => {
-    await moderator();
+    const v = await viewer();
     if (!validId(topicId) || (flag !== "pinned" && flag !== "locked")) return "That topic is gone.";
+    const communityId = await topicCommunity(topicId);
+    if (!communityId || !(await canModerateCommunity(v, communityId))) return NOT_MOD;
     await setTopicFlag(topicId, flag, Boolean(value));
   });
 }

@@ -4,6 +4,7 @@ import {
   badgeFor,
   CHAT_CHANNEL,
   CHAT_LIMITS,
+  CHAT_MAX_LENGTH,
   CHAT_PAGE_SIZE,
   chatNameProblem,
   checkMessage,
@@ -16,6 +17,7 @@ import {
   type ReportReason,
 } from "@midbig/shared";
 import { turnstile } from "./auth";
+import { answerChatMentions } from "./bots";
 import { pool, redis } from "./server";
 import type { PostBlock } from "./types";
 
@@ -38,6 +40,8 @@ export interface Viewer {
   bannedUntil: number | null;
   isStaff: boolean;
   reputation: number;
+  /** Verified members can create m/ communities. */
+  verified: boolean;
 }
 
 export async function getViewer(userId: string): Promise<Viewer | null> {
@@ -49,12 +53,13 @@ export async function getViewer(userId: string): Promise<Viewer | null> {
     createdAt: Date;
     twoFactorEnabled: boolean | null;
     reputation: number;
+    verified: boolean;
     banned: boolean;
     until: Date | null;
   }>(
-    `SELECT u.id, u.email, u.role, u.chat_name, u."createdAt", u."twoFactorEnabled", u.reputation,
+    `SELECT u.id, u.email, u.role, u.chat_name, u."createdAt", u."twoFactorEnabled", u.reputation, u.verified,
             b.user_id IS NOT NULL AS banned, b.until
-     FROM "user" u LEFT JOIN chat_bans b ON b.user_id = u.id WHERE u.id = $1`,
+     FROM "user" u LEFT JOIN chat_bans b ON b.user_id = u.id WHERE u.id = $1 AND NOT u.is_bot`,
     [userId],
   );
   const r = res.rows[0];
@@ -75,6 +80,7 @@ export async function getViewer(userId: string): Promise<Viewer | null> {
     bannedUntil: r.banned && until > Date.now() ? until : null,
     isStaff: role !== "user",
     reputation: r.reputation,
+    verified: r.verified || role === "admin",
   };
 }
 
@@ -100,12 +106,13 @@ interface MessageRecord {
   user_id: string;
   chat_name: string | null;
   role: ChatRole;
+  is_bot: boolean;
   body: string;
   created_at: Date;
   status: "visible" | "held" | "removed";
 }
 
-const MESSAGE_SELECT = `SELECT m.id::text, m.room, m.user_id, u.chat_name, u.role, m.body, m.created_at, m.status
+const MESSAGE_SELECT = `SELECT m.id::text, m.room, m.user_id, u.chat_name, u.role, u.is_bot, m.body, m.created_at, m.status
   FROM chat_messages m JOIN "user" u ON u.id = m.user_id`;
 
 function toMessage(r: MessageRecord): ChatMessage {
@@ -114,7 +121,7 @@ function toMessage(r: MessageRecord): ChatMessage {
     room: r.room,
     userId: r.user_id,
     name: r.chat_name ?? "member",
-    badge: badgeFor(r.role),
+    badge: badgeFor(r.role, r.is_bot),
     body: r.body,
     at: r.created_at.getTime(),
     ...(r.status === "held" ? { held: true } : {}),
@@ -203,6 +210,9 @@ export async function postMessage(
   if (room.kind === "coin") {
     const asset = await pool().query(`SELECT 1 FROM assets WHERE id = $1`, [room.assetId]);
     if (!asset.rowCount) return { ok: false, error: "That chat room doesn't exist." };
+  } else if (room.kind === "community") {
+    const c = await pool().query(`SELECT 1 FROM communities WHERE id = $1 AND status = 'active'`, [room.communityId]);
+    if (!c.rowCount) return { ok: false, error: "That chat room doesn't exist." };
   }
 
   // A bot check on each member's first message, when Turnstile is set up.
@@ -252,12 +262,31 @@ export async function postMessage(
     user_id: v.id,
     chat_name: v.chatName,
     role: v.role,
+    is_bot: false,
     body,
     created_at: res.rows[0]!.created_at,
     status: held ? "held" : "visible",
   });
-  if (!held) await publish({ type: "chat", room: input.room, msg });
+  if (!held) {
+    await publish({ type: "chat", room: input.room, msg });
+    void answerChatMentions({ room: input.room, messageId: msg.id, body, askerId: v.id });
+  }
   return { ok: true, msg };
+}
+
+/** A bot's answer in a chat room: stored and broadcast like a member's message. */
+export async function postBotMessage(bot: { userId: string; handle: string }, room: string, body: string): Promise<void> {
+  const text = body.slice(0, CHAT_MAX_LENGTH);
+  const res = await pool().query<{ id: string; created_at: Date }>(
+    `INSERT INTO chat_messages (room, user_id, body) VALUES ($1, $2, $3) RETURNING id::text, created_at`,
+    [room, bot.userId, text],
+  );
+  const row = res.rows[0]!;
+  await publish({
+    type: "chat",
+    room,
+    msg: toMessage({ id: row.id, room, user_id: bot.userId, chat_name: bot.handle, role: "user", is_bot: true, body: text, created_at: row.created_at, status: "visible" }),
+  });
 }
 
 export async function setChatName(v: Viewer, raw: string): Promise<string | null> {
@@ -342,7 +371,7 @@ export async function moderationQueue(): Promise<QueueItem[]> {
       author_messages: number;
     }
   >(
-    `SELECT m.id::text, m.room, m.user_id, u.chat_name, u.role, m.body, m.created_at, m.status, m.held_by, m.flags,
+    `SELECT m.id::text, m.room, m.user_id, u.chat_name, u.role, u.is_bot, m.body, m.created_at, m.status, m.held_by, m.flags,
             u."createdAt" AS author_joined,
             (SELECT count(*)::int FROM chat_messages x WHERE x.user_id = m.user_id) AS author_messages,
             (SELECT json_agg(json_build_object('reason', reason, 'n', n)) FROM
@@ -368,7 +397,7 @@ export async function approveMessages(mod: Viewer, ids: string[]): Promise<void>
     `WITH prev AS (SELECT id, status FROM chat_messages WHERE id = ANY($1::bigint[]) AND status <> 'removed' FOR UPDATE)
      UPDATE chat_messages m SET status = 'visible', reviewed_at = now(), reviewed_by = $2
      FROM prev, "user" u WHERE m.id = prev.id AND u.id = m.user_id
-     RETURNING m.id::text, m.room, m.user_id, u.chat_name, u.role, m.body, m.created_at, m.status, prev.status = 'held' AS was_held`,
+     RETURNING m.id::text, m.room, m.user_id, u.chat_name, u.role, u.is_bot, m.body, m.created_at, m.status, prev.status = 'held' AS was_held`,
     [ids, mod.id],
   );
   await Promise.all(
