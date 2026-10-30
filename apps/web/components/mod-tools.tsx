@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { FILTER_REASON_LABELS, parseRoom, REPORT_REASONS, type ChatRole } from "@midbig/shared";
+import { assetPath, FILTER_REASON_LABELS, parseRoom, REPORT_REASONS, type ChatRole } from "@midbig/shared";
 import { adminSetModerator, modApprove, modBan, modRemove, modUnban } from "@/app/chat-actions";
 import type { ActionResult } from "@/app/actions";
 import type { QueueItem } from "@/lib/chat";
@@ -11,7 +11,7 @@ import type { QueueItem } from "@/lib/chat";
 function roomLink(room: string) {
   const r = parseRoom(room);
   if (!r) return room;
-  return r.kind === "global" ? <Link href="/chat">Everyone</Link> : <Link href={`/coins/${r.assetId}`}>{r.assetId}</Link>;
+  return r.kind === "global" ? <Link href="/chat">Everyone</Link> : <Link href={assetPath(r.assetId)}>{r.assetId}</Link>;
 }
 
 function ago(ms: number): string {

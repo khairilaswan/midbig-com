@@ -22,7 +22,7 @@ cd midbig-com
 ```
 
 To try changes before their pull request is merged, switch to its branch
-(for Phase 3: `git checkout claude/project-thread-8u0fye`), and back with
+(for Phase 4: `git checkout claude/project-thread-4wtey4`), and back with
 `git checkout main`.
 
 ## 3. Create the settings file (one time)
@@ -33,6 +33,7 @@ Create a file called `.env` in the `midbig-com` folder with:
 POSTGRES_PASSWORD=pick-any-long-password
 COINGECKO_API_KEY=
 ADMIN_EMAILS=you@example.com
+FINNHUB_API_KEY=
 ```
 
 Put the email you sign up with after `ADMIN_EMAILS=`. That account becomes the
@@ -41,6 +42,14 @@ admin who runs the chat moderation queue.
 The CoinGecko key is optional. Without it, the first load of coin history is
 slower. You can get a free Demo key at https://www.coingecko.com/en/api/pricing
 and paste it after the `=` later.
+
+The Finnhub key turns on **Stocks** and **Forex**. Leave it empty for crypto
+only. A free key from https://finnhub.io/register is fine on your own
+computer (the free plan is for personal use; a public site needs a paid plan).
+With the free key, all 30 forex pairs and the 20 biggest stocks should update live,
+the other stocks refresh about every 10 minutes and show "Delayed", and charts
+start empty and fill in from live trades, because a year of history is a paid
+feature.
 
 ## 4. Start it
 
@@ -56,6 +65,21 @@ The first start takes a few minutes while it builds. Then open:
 Prices should start moving within a few seconds. Charts fill in as the
 1-minute candles build up. The 30-day and 1-year history downloads in the
 background, one coin every few seconds, so it takes about 30 minutes to finish.
+
+## Stocks and forex
+
+With a Finnhub key set, **Stocks** lists the S&P 500 by market cap and
+**Forex** lists 30 currency pairs. The first load takes about 30 minutes on
+the free plan (three calls per stock, 50 a minute); prices appear as they load.
+
+- Stocks trade 9:30 am to 4:00 pm New York time on weekdays (9:30 pm to 4:00
+  am in Malaysia while the US is on summer time, 10:30 pm to 5:00 am in
+  winter). Outside those hours a stock shows a grey **Market closed** with its
+  last price, not "Delayed".
+- Forex trades from Sunday 5 pm to Friday 5 pm New York time.
+- Stocks can go in the portfolio, the what-if simulator (try "Stock market
+  falls: S&P 500 −20%") and alerts. Forex pairs can be watched and alerted on,
+  but not added to the portfolio yet.
 
 ## Accounts, portfolio and alerts
 

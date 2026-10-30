@@ -6,8 +6,8 @@ import { emailEnabled, getSession } from "@/lib/auth";
 import { getAlerts, getAssetRows, vapidKeys } from "@/lib/user-data";
 
 export const metadata: Metadata = {
-  title: "Crypto price alerts",
-  description: "Get a notification on your phone or computer when a coin goes above or below your price. Free.",
+  title: "Price alerts for crypto, stocks and forex",
+  description: "Get a notification on your phone or computer when a coin, stock or currency goes above or below your price. Free.",
 };
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,8 @@ export default async function AlertsPage({ searchParams }: Props) {
       <div className="narrow">
         <h1 className="page-title">Price alerts</h1>
         <p className="lede">
-          Get a notification on your phone or computer the moment a coin goes above or below your price.
+          Get a notification on your phone or computer the moment a coin, stock or currency pair goes above or below
+          your price.
         </p>
         <p className="row-gap">
           <Link href={`/signup?next=${encodeURIComponent(next)}`} className="btn">

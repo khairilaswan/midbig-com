@@ -11,11 +11,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Crypto prices, charts and market caps | midbig",
+    default: "Crypto, stock and forex prices, charts and market caps | midbig",
     template: "%s | midbig",
   },
   description:
-    "Live cryptocurrency prices from Coinbase and Kraken, market caps, charts and the day's biggest movers for the top 500 coins.",
+    "Live prices for the top 500 cryptocurrencies, S&P 500 stocks and major forex pairs, with market caps, charts and the day's biggest movers.",
   applicationName: SITE_NAME,
   appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
   openGraph: { siteName: SITE_NAME, type: "website" },
@@ -43,6 +43,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <nav className="nav">
               <Link href="/">Coins</Link>
+              <Link href="/stocks">Stocks</Link>
+              <Link href="/forex">Forex</Link>
               <Link href="/gainers-losers">Movers</Link>
               <Link href="/watchlist">Watchlist</Link>
               <Link href="/portfolio">Portfolio</Link>
@@ -61,11 +63,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               wrong. Do your own research before you trade.
             </p>
             <p className="muted">
-              Live prices from Coinbase and Kraken. Market data from{" "}
+              Crypto prices from Coinbase and Kraken, market data from{" "}
               <a href="https://www.coingecko.com" rel="noopener" target="_blank">
                 CoinGecko
               </a>
-              . A price is marked &ldquo;Delayed&rdquo; when no exchange has confirmed it in the last 60 seconds.
+              . Stock and forex data from{" "}
+              <a href="https://finnhub.io" rel="noopener" target="_blank">
+                Finnhub
+              </a>
+              ; stock prices are US exchange trades. A price is marked &ldquo;Delayed&rdquo; when no source has confirmed
+              it in the last 60 seconds while its market is open.
             </p>
             <p className="footer-links">
               <Link href="/terms">Terms</Link>

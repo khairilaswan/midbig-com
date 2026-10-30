@@ -4,6 +4,8 @@
  */
 
 export const BTC_ID = "bitcoin";
+/** Stands for the S&P 500 index in a shock; stocks follow it by their beta. */
+export const SPX_ID = "^spx";
 
 export interface SimPosition {
   assetId: string;
@@ -11,13 +13,18 @@ export interface SimPosition {
   quantity: number;
   /** Current USD price. */
   price: number;
-  /** Sensitivity to Bitcoin's daily moves; 1 when unknown. */
+  /** Sensitivity to its market's moves (Bitcoin for coins, the S&P 500 for stocks); 1 when unknown. */
   beta?: number | null;
   /** Stablecoins don't move in market-wide scenarios. */
   stable?: boolean;
+  /** Missing means crypto. */
+  assetClass?: "crypto" | "stock";
 }
 
-/** A price change for one asset, or for every non-stable asset with assetId "*". */
+/**
+ * A price change for one asset, for every non-stable coin with assetId "*",
+ * or for the S&P 500 (SPX_ID), which moves every stock by its beta.
+ */
 export interface Shock {
   assetId: string;
   kind: "pct" | "price";
@@ -42,8 +49,8 @@ export interface SimRow {
   pct: number;
   value: number;
   newValue: number;
-  /** Why it moved: its own shock, the "*" shock, or following Bitcoin. */
-  driver: "own" | "all" | "btc" | "none";
+  /** Why it moved: its own shock, the "*" shock, following Bitcoin, or following the S&P 500. */
+  driver: "own" | "all" | "btc" | "spx" | "none";
 }
 
 export interface SimResult {
@@ -60,8 +67,9 @@ function shockPct(shock: Shock, price: number): number {
 }
 
 export function runScenario(positions: SimPosition[], scenario: Pick<Scenario, "shocks" | "followBtc">): SimResult {
-  const own = new Map(scenario.shocks.filter((s) => s.assetId !== "*").map((s) => [s.assetId, s]));
+  const own = new Map(scenario.shocks.filter((s) => s.assetId !== "*" && s.assetId !== SPX_ID).map((s) => [s.assetId, s]));
   const all = scenario.shocks.find((s) => s.assetId === "*");
+  const spx = scenario.shocks.find((s) => s.assetId === SPX_ID);
   const btcPosition = positions.find((p) => p.assetId === BTC_ID);
   const btcShock = own.get(BTC_ID);
   // A Bitcoin target price needs Bitcoin's price; take it from the holdings when there.
@@ -74,9 +82,15 @@ export function runScenario(positions: SimPosition[], scenario: Pick<Scenario, "
     let pct = 0;
     let driver: SimRow["driver"] = "none";
     const mine = own.get(p.assetId);
+    const isStock = p.assetClass === "stock";
     if (mine) {
       pct = shockPct(mine, p.price);
       driver = "own";
+    } else if (isStock) {
+      if (spx) {
+        pct = (p.beta ?? 1) * spx.value;
+        driver = "spx";
+      }
     } else if (all && !p.stable) {
       pct = shockPct(all, p.price);
       driver = "all";
@@ -147,6 +161,23 @@ export function presetScenarios(btcPrice: number | null): Scenario[] {
       label: "Deep bear market: BTC −75%",
       description: "A drop like 2021–2022. Bitcoin loses three quarters and other coins follow it by their beta.",
       shocks: [{ assetId: BTC_ID, kind: "pct", value: -75 }],
+      followBtc: true,
+    },
+    {
+      id: "stocks-down",
+      label: "Stock market falls: S&P 500 −20%",
+      description: "The S&P 500 drops 20%, about the size of a typical bear market. Each stock moves by its beta; coins stay put.",
+      shocks: [{ assetId: SPX_ID, kind: "pct", value: -20 }],
+      followBtc: false,
+    },
+    {
+      id: "risk-off",
+      label: "Everything sells off: S&P −15%, BTC −30%",
+      description: "Stocks and crypto fall together, as in March 2020 or 2022. Stocks follow the S&P 500 and coins follow Bitcoin, each by its beta.",
+      shocks: [
+        { assetId: SPX_ID, kind: "pct", value: -15 },
+        { assetId: BTC_ID, kind: "pct", value: -30 },
+      ],
       followBtc: true,
     },
     {

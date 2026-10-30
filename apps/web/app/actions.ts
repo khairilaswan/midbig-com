@@ -2,8 +2,9 @@
 
 import {
   alertHit,
+  assetClassOf,
   computeHoldings,
-  formatUsd,
+  formatAssetPrice,
   MAX_ALERTS_PER_USER,
   MAX_SUBSCRIPTIONS,
   OversellError,
@@ -46,7 +47,7 @@ export async function setWatched(assetId: string, watched: boolean): Promise<Act
       await pool().query(`DELETE FROM watchlist WHERE user_id = $1 AND asset_id = $2`, [uid, assetId]);
       return;
     }
-    if (!(await assetExists(assetId))) return "That coin wasn't found.";
+    if (!(await assetExists(assetId))) return "That wasn't found. Pick it from the list.";
     const res = await pool().query<{ n: number }>(`SELECT count(*)::int AS n FROM watchlist WHERE user_id = $1`, [uid]);
     if ((res.rows[0]?.n ?? 0) >= MAX_SUBSCRIPTIONS) return `A watchlist can hold up to ${MAX_SUBSCRIPTIONS} coins.`;
     await pool().query(`INSERT INTO watchlist (user_id, asset_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [uid, assetId]);
@@ -75,13 +76,15 @@ export async function addTxn(input: TxnInput): Promise<ActionResult> {
     const uid = await userId();
     const t = { ...input, note: input.note.trim().slice(0, 200) };
     if (t.side !== "buy" && t.side !== "sell") return "Choose buy or sell.";
-    if (!(Number.isFinite(t.quantity) && t.quantity > 0)) return "Enter how many coins.";
-    if (!(Number.isFinite(t.price) && t.price >= 0)) return "Enter the price per coin.";
+    if (!(Number.isFinite(t.quantity) && t.quantity > 0)) return "Enter how many you bought or sold.";
+    if (!(Number.isFinite(t.price) && t.price >= 0)) return "Enter the price for each one.";
     if (!(Number.isFinite(t.fee) && t.fee >= 0)) return "The fee can't be negative.";
     if (!Number.isFinite(t.executedAt) || t.executedAt > Date.now() + 86_400_000 || t.executedAt < Date.UTC(2009, 0, 1)) {
       return "Pick a date between 2009 and today.";
     }
-    if (!(await assetExists(t.assetId))) return "Pick a coin from the list.";
+    // A rate isn't a USD price, so holdings in a pair can't be valued yet.
+    if (assetClassOf(t.assetId) === "forex") return "Forex pairs can't go in the portfolio yet. Watch them or set an alert.";
+    if (!(await assetExists(t.assetId))) return "Pick a coin or stock from the list.";
     const txns = await getTxns(uid);
     if (txns.length >= MAX_TXNS) return `A portfolio can hold up to ${MAX_TXNS} transactions.`;
     try {
@@ -126,10 +129,11 @@ export async function createAlert(input: {
     if (input.direction !== "above" && input.direction !== "below") return "Choose above or below.";
     if (!(Number.isFinite(input.target) && input.target > 0)) return "Enter a target price above zero.";
     const [asset] = await getAssetRows([input.assetId]);
-    if (!asset) return "Pick a coin from the list.";
+    if (!asset) return "Pick something from the list.";
     const price = asset.live?.p ?? asset.refPrice;
     if (price != null && alertHit(input.direction, input.target, price)) {
-      return `${asset.symbol} is already ${input.direction} ${formatUsd(input.target)} (now ${formatUsd(price)}).`;
+      const fmt = (v: number) => formatAssetPrice(asset.id, v);
+      return `${asset.symbol} is already ${input.direction} ${fmt(input.target)} (now ${fmt(price)}).`;
     }
     const res = await pool().query<{ n: number }>(
       `SELECT count(*)::int AS n FROM price_alerts WHERE user_id = $1 AND triggered_at IS NULL`,

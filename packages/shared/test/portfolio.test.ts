@@ -11,6 +11,7 @@ import {
   presetScenarios,
   roundTarget,
   runScenario,
+  SPX_ID,
   valueHoldings,
   type Txn,
 } from "../src/index.ts";
@@ -126,4 +127,32 @@ test("alertHit", () => {
   assert.ok(alertHit("above", 100, 100));
   assert.ok(!alertHit("above", 100, 99.99));
   assert.ok(alertHit("below", 100, 50));
+});
+
+test("runScenario: stocks follow the S&P 500 by beta and ignore crypto shocks", () => {
+  const r = runScenario(
+    [
+      { assetId: "bitcoin", symbol: "BTC", quantity: 1, price: 100_000 },
+      { assetId: "stock-aapl", symbol: "AAPL", quantity: 10, price: 200, beta: 1.2, assetClass: "stock" },
+      { assetId: "stock-ko", symbol: "KO", quantity: 10, price: 60, assetClass: "stock" },
+    ],
+    {
+      shocks: [
+        { assetId: SPX_ID, kind: "pct", value: -10 },
+        { assetId: "*", kind: "pct", value: -50 },
+      ],
+      followBtc: false,
+    },
+  );
+  const by = new Map(r.rows.map((x) => [x.assetId, x]));
+  assert.equal(by.get("bitcoin")!.pct, -50);
+  assert.ok(Math.abs(by.get("stock-aapl")!.pct - -12) < 1e-9);
+  assert.equal(by.get("stock-aapl")!.driver, "spx");
+  assert.equal(by.get("stock-ko")!.pct, -10);
+  // A Bitcoin-only scenario leaves stocks alone.
+  const btcOnly = runScenario(
+    [{ assetId: "stock-aapl", symbol: "AAPL", quantity: 1, price: 200, beta: 1.2, assetClass: "stock" }],
+    { shocks: [{ assetId: "bitcoin", kind: "pct", value: -30 }], followBtc: true },
+  );
+  assert.equal(btcOnly.rows[0]!.pct, 0);
 });

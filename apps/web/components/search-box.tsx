@@ -2,28 +2,39 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { assetPath, type AssetClass } from "@midbig/shared";
 import { CoinLogo } from "./market";
 
 export interface SearchResult {
   id: string;
+  assetClass: AssetClass;
   symbol: string;
   name: string;
   image: string | null;
   rank: number | null;
+  /** A stock's beta against the S&P 500. */
+  beta: number | null;
   /** Latest price (live or delayed), at most a minute old. */
   price: number | null;
 }
 type Result = SearchResult;
 
-/** Coin search. Opens the coin's page, or calls onPick when given (for forms). */
+const CLASS_LABEL: Record<AssetClass, string> = { crypto: "Coin", stock: "Stock", forex: "Forex" };
+
+/**
+ * Search for coins, stocks and forex pairs. Opens the asset's page, or calls
+ * onPick when given (for forms); `classes` limits what a form can take.
+ */
 export function SearchBox({
   onPick,
-  placeholder = "Search coins",
+  placeholder = "Search coins, stocks, forex",
   autoFocus,
+  classes,
 }: {
   onPick?: (r: SearchResult) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  classes?: AssetClass[];
 }) {
   const router = useRouter();
   const listId = useId();
@@ -33,6 +44,7 @@ export function SearchBox({
   const [active, setActive] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  const only = classes?.join(",") ?? "";
   useEffect(() => {
     const term = q.trim();
     if (!term) {
@@ -41,7 +53,7 @@ export function SearchBox({
     }
     const ctrl = new AbortController();
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal: ctrl.signal })
+      fetch(`/api/search?q=${encodeURIComponent(term)}${only ? `&classes=${only}` : ""}`, { signal: ctrl.signal })
         .then((r) => (r.ok ? r.json() : []))
         .then((data: Result[]) => {
           setResults(data);
@@ -53,7 +65,7 @@ export function SearchBox({
       clearTimeout(t);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, only]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -68,7 +80,7 @@ export function SearchBox({
     setOpen(false);
     setQ("");
     if (onPick) onPick(r);
-    else router.push(`/coins/${r.id}`);
+    else router.push(assetPath(r.id));
   };
 
   return (
@@ -120,7 +132,9 @@ export function SearchBox({
               <CoinLogo src={r.image} symbol={r.symbol} size={20} />
               <span className="name">{r.name}</span>
               <span className="sym">{r.symbol}</span>
-              {r.rank != null && <span className="muted rank">#{r.rank}</span>}
+              {r.assetClass === "crypto"
+                ? r.rank != null && <span className="muted rank">#{r.rank}</span>
+                : (!classes || classes.length > 1) && <span className="badge small">{CLASS_LABEL[r.assetClass]}</span>}
             </li>
           ))}
         </ul>

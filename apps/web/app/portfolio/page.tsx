@@ -5,8 +5,8 @@ import { getSession } from "@/lib/auth";
 import { getAssetRows, getTxns } from "@/lib/user-data";
 
 export const metadata: Metadata = {
-  title: "Crypto portfolio tracker with live profit and loss",
-  description: "Track your crypto holdings with live prices, average cost and profit or loss. Free.",
+  title: "Crypto and stock portfolio tracker with live profit and loss",
+  description: "Track your crypto and US stock holdings with live prices, average cost and profit or loss. Free.",
 };
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,8 @@ export default async function PortfolioPage({ searchParams }: Props) {
       <div className="narrow">
         <h1 className="page-title">Portfolio tracker</h1>
         <p className="lede">
-          Add your buys and sells and see what your crypto is worth right now, what you paid on average, and your profit
-          or loss, updated live from Coinbase and Kraken.
+          Add your buys and sells and see what your crypto and stocks are worth right now, what you paid on average, and
+          your profit or loss, updated live.
         </p>
         <p className="row-gap">
           <Link href="/signup?next=/portfolio" className="btn">

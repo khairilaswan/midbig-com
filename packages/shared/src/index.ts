@@ -3,6 +3,7 @@
  */
 
 import type { ChatEvent } from "./chat.js";
+import { assetClassOf, forexDecimals } from "./markets.js";
 
 /** A price is shown as live only if a feed confirmed it within this window. */
 export const MAX_PRICE_AGE_MS = 60_000;
@@ -14,7 +15,7 @@ export const TICKS_CHANNEL = "ticks";
 
 /** Latest known price for one asset, as stored in Redis and pushed to browsers. */
 export interface LivePrice {
-  /** Asset id (the CoinGecko id, also the URL slug), e.g. "bitcoin". */
+  /** Asset id: the CoinGecko id for crypto ("bitcoin"), "stock-aapl" or "fx-eur-usd" otherwise. */
   id: string;
   /** Last trade price in USD. */
   p: number;
@@ -79,6 +80,14 @@ export function formatUsd(value: number | null | undefined): string {
   );
 }
 
+/** "$1,234.56" for crypto and stocks; "1.08452" for a forex rate, which is in the quote currency. */
+export function formatAssetPrice(id: string, value: number | null | undefined): string {
+  if (assetClassOf(id) !== "forex") return formatUsd(value);
+  if (value == null || !Number.isFinite(value)) return "—";
+  const d = forexDecimals(value);
+  return value.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
 /** Compact USD for large figures: $1.23T, $456.7B, $12.3M. */
 export function formatUsdCompact(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -106,3 +115,4 @@ export * from "./portfolio.js";
 export * from "./simulate.js";
 export * from "./alerts.js";
 export * from "./chat.js";
+export * from "./markets.js";

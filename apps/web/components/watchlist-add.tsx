@@ -11,7 +11,7 @@ export function WatchlistAdd() {
   return (
     <div className="watchlist-add">
       <SearchBox
-        placeholder="Add a coin to your watchlist"
+        placeholder="Add a coin, stock or forex pair"
         onPick={async (r) => {
           const res = await setWatched(r.id, true);
           setError(res.ok ? "" : res.error);

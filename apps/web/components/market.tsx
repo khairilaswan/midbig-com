@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { formatPct, formatUsd, formatUsdCompact, pctChange, type LivePrice } from "@midbig/shared";
+import {
+  assetPath,
+  formatAssetPrice,
+  formatPct,
+  formatUsdCompact,
+  marketStatus,
+  pctChange,
+  type AssetClass,
+  type LivePrice,
+} from "@midbig/shared";
 import type { AssetRow } from "@/lib/types";
 import { Sparkline } from "./sparkline";
 import { isLive, useLivePrice, useNow } from "./live";
@@ -20,9 +29,25 @@ export function ago(ms: number): string {
   return `${Math.round(m / 60)}h ago`;
 }
 
-/** Green dot for live prices; amber "Delayed" with the age otherwise. */
+/**
+ * Green dot for live prices; amber "Delayed" with the age otherwise. Stocks
+ * and forex outside trading hours get a grey "Market closed" instead, since
+ * their last trade is the price until the market opens.
+ */
 export function Freshness({ row, lp, verbose = false }: { row: AssetRow; lp: LivePrice | null; verbose?: boolean }) {
   const now = useNow();
+  const market = marketStatus(row.id, now);
+  if (market.phase !== "open") {
+    const at = lp?.t ?? row.metadataAt;
+    return (
+      <span className="fresh closed" title={at ? `Last price at ${new Date(at).toUTCString()}` : market.label}>
+        <i aria-hidden />{" "}
+        <span suppressHydrationWarning>
+          {verbose && at ? `${market.label} · last price ${ago(now - at)}` : market.label}
+        </span>
+      </span>
+    );
+  }
   if (isLive(lp, now)) {
     return (
       <span className="fresh live" title={`Live from ${lp!.src.join(" and ")}`}>
@@ -62,7 +87,16 @@ export function CoinLogo({ src, symbol, size = 24 }: { src: string | null; symbo
   return <img src={src} alt="" width={size} height={size} loading="lazy" className="logo" />;
 }
 
-function MarketRow({ row, watch }: { row: AssetRow; watch: boolean }) {
+/** Column names per kind of list; "mixed" is the watchlist. */
+export type ListKind = AssetClass | "mixed";
+const HEAD: Record<ListKind, { asset: string; day: string; volume: string }> = {
+  crypto: { asset: "Coin", day: "24h", volume: "Volume (24h)" },
+  stock: { asset: "Stock", day: "Today", volume: "Avg. volume" },
+  forex: { asset: "Pair", day: "24h", volume: "Volume" },
+  mixed: { asset: "Name", day: "24h", volume: "Volume" },
+};
+
+function MarketRow({ row, watch, kind }: { row: AssetRow; watch: boolean; kind: ListKind }) {
   const lp = useLivePrice(row.id, row.live);
   const price = displayPrice(row, lp);
   // Market cap moves with the price between metadata refreshes.
@@ -76,14 +110,24 @@ function MarketRow({ row, watch }: { row: AssetRow; watch: boolean }) {
       )}
       <td className="num muted rank">{row.rank ?? "—"}</td>
       <td className="coin">
-        <Link href={`/coins/${row.id}`}>
+        <Link href={assetPath(row.id)}>
           <CoinLogo src={row.image} symbol={row.symbol} />
-          <span className="name">{row.name}</span>
-          <span className="sym">{row.symbol}</span>
+          {row.assetClass === "forex" ? (
+            // "EUR/USD" is what traders look for; the long name goes second.
+            <>
+              <span className="name">{row.symbol}</span>
+              <span className="muted small hide-sm">{row.name}</span>
+            </>
+          ) : (
+            <>
+              <span className="name">{row.name}</span>
+              <span className="sym">{row.symbol}</span>
+            </>
+          )}
         </Link>
       </td>
       <td className="num price">
-        <span className="price-val">{formatUsd(price)}</span> <Freshness row={row} lp={lp} />
+        <span className="price-val">{formatAssetPrice(row.id, price)}</span> <Freshness row={row} lp={lp} />
       </td>
       <td className="num">
         <Change value={pctChange(price, row.ref24h)} />
@@ -91,8 +135,8 @@ function MarketRow({ row, watch }: { row: AssetRow; watch: boolean }) {
       <td className="num hide-sm">
         <Change value={pctChange(price, row.ref7d)} />
       </td>
-      <td className="num hide-sm">{formatUsdCompact(mcap)}</td>
-      <td className="num hide-md">{formatUsdCompact(row.volume24h)}</td>
+      {kind !== "forex" && <td className="num hide-sm">{formatUsdCompact(mcap)}</td>}
+      {kind !== "forex" && <td className="num hide-md">{formatUsdCompact(row.volume24h)}</td>}
       <td className="hide-md spark">
         <Sparkline points={row.sparkline} />
       </td>
@@ -101,7 +145,16 @@ function MarketRow({ row, watch }: { row: AssetRow; watch: boolean }) {
 }
 
 /** watch adds a star column for removing rows (the watchlist page). */
-export function MarketTable({ rows, watch = false }: { rows: AssetRow[]; watch?: boolean }) {
+export function MarketTable({
+  rows,
+  watch = false,
+  kind = "crypto",
+}: {
+  rows: AssetRow[];
+  watch?: boolean;
+  kind?: ListKind;
+}) {
+  const head = HEAD[kind];
   return (
     <div className="table-wrap">
       <table className="market">
@@ -113,18 +166,18 @@ export function MarketTable({ rows, watch = false }: { rows: AssetRow[]; watch?:
               </th>
             )}
             <th className="num rank">#</th>
-            <th>Coin</th>
-            <th className="num">Price</th>
-            <th className="num">24h</th>
+            <th>{head.asset}</th>
+            <th className="num">{kind === "forex" ? "Rate" : "Price"}</th>
+            <th className="num">{head.day}</th>
             <th className="num hide-sm">7d</th>
-            <th className="num hide-sm">Market cap</th>
-            <th className="num hide-md">Volume (24h)</th>
+            {kind !== "forex" && <th className="num hide-sm">Market cap</th>}
+            {kind !== "forex" && <th className="num hide-md">{head.volume}</th>}
             <th className="hide-md">Last 7 days</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <MarketRow key={r.id} row={r} watch={watch} />
+            <MarketRow key={r.id} row={r} watch={watch} kind={kind} />
           ))}
         </tbody>
       </table>
@@ -148,11 +201,11 @@ function MoverItem({ row }: { row: AssetRow }) {
   const price = displayPrice(row, lp);
   return (
     <li>
-      <Link href={`/coins/${row.id}`}>
+      <Link href={assetPath(row.id)}>
         <CoinLogo src={row.image} symbol={row.symbol} size={20} />
         <span className="name">{row.name}</span>
         <span className="sym">{row.symbol}</span>
-        <span className="num price-val">{formatUsd(price)}</span>
+        <span className="num price-val">{formatAssetPrice(row.id, price)}</span>
         <Change value={pctChange(price, row.ref24h)} />
       </Link>
     </li>

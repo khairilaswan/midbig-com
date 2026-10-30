@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { coinRoom, formatUsd } from "@midbig/shared";
+import { notFound, permanentRedirect } from "next/navigation";
+import { assetPath, coinRoom, formatUsd } from "@midbig/shared";
 import { ChatRoom } from "@/components/chat";
 import { CoinHeader } from "@/components/coin-header";
 import { PriceChart } from "@/components/price-chart";
@@ -30,6 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CoinPage({ params }: Props) {
   const [asset, session] = await Promise.all([getAsset((await params).id), getSession()]);
   if (!asset) notFound();
+  if (asset.assetClass !== "crypto") permanentRedirect(assetPath(asset.id));
   const watched = session ? await isWatched(session.user.id, asset.id) : false;
 
   return (

@@ -22,7 +22,7 @@ export abstract class Feed {
     readonly name: string,
     private readonly url: string,
     protected readonly state: MarketState,
-    /** Upper-case ticker symbol -> asset id, refreshed by the metadata sync. */
+    /** Feed symbol -> asset id, refreshed by the metadata sync. */
     protected readonly symbols: () => Map<string, string>,
   ) {
     this.log = logger(name);
@@ -32,7 +32,11 @@ export abstract class Feed {
     this.stopped = false;
     this.connect();
     this.watchdog = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN && Date.now() - this.lastMessageAt > SILENCE_TIMEOUT_MS) {
+      if (
+        this.ws?.readyState === WebSocket.OPEN &&
+        this.expectsTraffic() &&
+        Date.now() - this.lastMessageAt > SILENCE_TIMEOUT_MS
+      ) {
         this.log.warn("feed went silent, reconnecting");
         this.ws.terminate();
       }
@@ -50,6 +54,14 @@ export abstract class Feed {
     this.ws?.terminate();
   }
 
+  /**
+   * Whether the feed should be talking now. Exchanges that close (stocks,
+   * forex) can go quiet for hours without being broken.
+   */
+  expectsTraffic(): boolean {
+    return true;
+  }
+
   /** Called on each (re)connect; send subscriptions here. */
   protected abstract onOpen(ws: WebSocket): Promise<void>;
   protected abstract onMessage(msg: unknown, ws: WebSocket): void;
@@ -65,7 +77,8 @@ export abstract class Feed {
     this.lastMessageAt = Date.now();
 
     ws.on("open", () => {
-      this.log.info(`connected to ${this.url}`);
+      // The query string can hold an API key; keep it out of the logs.
+      this.log.info(`connected to ${this.url.replace(/\?.*$/, "")}`);
       this.onOpen(ws).catch((err) => {
         this.log.error("subscribe failed", err);
         ws.terminate();

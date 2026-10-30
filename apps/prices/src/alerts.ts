@@ -2,7 +2,8 @@ import type pg from "pg";
 import webpush from "web-push";
 import {
   alertHit,
-  formatUsd,
+  assetPath,
+  formatAssetPrice,
   sendEmail,
   VAPID_PRIVATE,
   VAPID_PUBLIC,
@@ -66,7 +67,7 @@ export function currentPrice(state: MarketState, a: Pick<Waiting, "asset_id" | "
 async function check(state: MarketState, pool: pg.Pool, cfg: AlertConfig): Promise<void> {
   const res = await pool.query<Waiting>(
     `SELECT p.id::text, p.user_id, p.asset_id, p.direction, p.target, p.notify_email, a.ref_price,
-            (extract(epoch FROM a.metadata_updated_at) * 1000)::float8 AS metadata_ms
+            (extract(epoch FROM COALESCE(a.quote_updated_at, a.metadata_updated_at)) * 1000)::float8 AS metadata_ms
      FROM price_alerts p JOIN assets a ON a.id = p.asset_id
      WHERE p.triggered_at IS NULL`,
   );
@@ -90,9 +91,11 @@ async function notify(pool: pg.Pool, cfg: AlertConfig, a: Waiting, price: number
   const row = info.rows[0];
   if (!row) return;
   const sym = row.symbol.toUpperCase();
-  const title = `${sym} is ${a.direction} ${formatUsd(a.target)}`;
-  const body = `${row.name} is at ${formatUsd(price)}. Your alert for ${a.direction} ${formatUsd(a.target)} was hit.`;
-  const payload: PushPayload = { title, body, url: `/coins/${a.asset_id}`, tag: `alert-${a.id}` };
+  const fmt = (v: number) => formatAssetPrice(a.asset_id, v);
+  const title = `${sym} is ${a.direction} ${fmt(a.target)}`;
+  const body = `${row.name} is at ${fmt(price)}. Your alert for ${a.direction} ${fmt(a.target)} was hit.`;
+  const path = assetPath(a.asset_id);
+  const payload: PushPayload = { title, body, url: path, tag: `alert-${a.id}` };
 
   const sent = await pushToUser(pool, cfg, a.user_id, payload);
   if (a.notify_email) {
@@ -101,7 +104,7 @@ async function notify(pool: pg.Pool, cfg: AlertConfig, a: Waiting, price: number
       from: cfg.emailFrom,
       to: row.email,
       subject: title,
-      text: `${body}\n\n${cfg.siteUrl}/coins/${a.asset_id}\n\nManage your alerts: ${cfg.siteUrl}/alerts`,
+      text: `${body}\n\n${cfg.siteUrl}${path}\n\nManage your alerts: ${cfg.siteUrl}/alerts`,
     });
     if (!emailed) log.warn(`alert ${a.id} wanted email but RESEND_API_KEY is not set`);
   }
