@@ -61,6 +61,8 @@ To use the fake feeds instead, run `pnpm dev:mock` and start the price service w
 
 Checks: `pnpm typecheck` and `pnpm test`.
 
+To run the real site on your own computer for testing, see [docs/run-on-your-computer.md](docs/run-on-your-computer.md).
+
 ## Deploy to one server
 
 The stack is sized for a 2 vCPU / 4 GB VPS (for example a Hetzner Cloud server in Ashburn, Virginia).
