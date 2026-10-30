@@ -22,7 +22,7 @@ cd midbig-com
 ```
 
 To try changes before their pull request is merged, switch to its branch
-(for Phase 5: `git checkout claude/project-thread-3uay73`), and back with
+(for Phase 6: `git checkout claude/project-thread-wndukk`), and back with
 `git checkout main`.
 
 ## 3. Create the settings file (one time)
@@ -110,15 +110,38 @@ the free plan (three calls per stock, 50 a minute); prices appear as they load.
 - To test as a second person, open a private (incognito) window and sign up
   with another email.
 
-## Forum, profiles and stress tests
+## Communities, votes and bots
 
-- **Forum** is in the top menu. Start a topic with **Start a topic**, or from
-  the **Start a topic** button under any coin, stock or forex page's chat, which
-  links the topic to that page.
+- **Communities** is first in the top menu. Existing forum topics were moved
+  into communities: topics about a coin or stock went to its b/ community
+  (b/bitcoin, b/AAPL), the rest to hubs like b/general and b/forex.
+- **Set up the defaults**: turn on two-factor login on your account page
+  first, then open http://localhost:8000/admin (or **Admin portal** on the
+  account page). Under **Communities**, click **Create missing b/ communities**
+  to make b/ communities for the top 100 coins, top 100 stocks and 30 forex
+  pairs. Stocks and forex need the Finnhub key and a few minutes for their
+  prices to load first; run it again later to fill in any that were missing.
+- **Switch categories**: on the admin **Overview**, untick Forex (or Stocks, or
+  Crypto). Within a few seconds its menu item, pages and communities
+  disappear. Tick it again to bring everything back.
+- **Votes**: use ▲ and ▼ on topics and comments, and the 🔥 Hot, 🆕 New and
+  🏆 Top tabs. New accounts can vote after one day and downvote after three;
+  your admin account can vote at once.
+- **Comments** nest: click **Reply** under a comment. Comments at -4 or lower
+  fold themselves.
+- **Bots**: write `@pricebot $AAPL`, `@riskbot $BTC` or (inside a community)
+  `@pulsebot` in a topic, comment or chat message. The bot answers in a second
+  or two (reload the topic page to see it). Add your own bots under
+  **Admin > Bots**. AI bots need `ANTHROPIC_API_KEY=` in `.env` (a key from
+  https://console.anthropic.com, paid per reply), then restart.
+- **m/ communities**: verify a second test account under **Admin > Members**,
+  log in as it, and use **Communities > Create a community** to make one like
+  m/pepe. Unverified accounts see that only verified members can.
+- Tag assets with `$BTC` or `$NVDA` in any post: the tag links to the asset's
+  community.
 - The same waits apply as in chat (10 minutes before posting, 24 hours before
   links), plus one new topic every 2 minutes and one reply every 15 seconds.
-  Accounts can mark posts **👍 Helpful** after their first day. Your admin
-  account skips the waits.
+  Your admin account skips the waits.
 - Try a scam reply such as `DM me on telegram for guaranteed returns`. It waits
   in the **Forum queue** on http://localhost:8000/mod.
 - Click any name to see that member's profile, reputation and recent posts.
