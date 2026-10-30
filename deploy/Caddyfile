@@ -1,0 +1,25 @@
+# Reverse proxy and TLS. SITE_ADDRESS is "midbig.com, www.midbig.com" in
+# production (Caddy fetches certificates itself) and ":80" for local testing.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		-Server
+	}
+
+	@www header_regexp www Host ^www\.(.+)$
+	redir @www https://{re.www.1}{uri} permanent
+
+	# Live price stream and the feed health check (for UptimeRobot: /ws/health).
+	handle /ws* {
+		reverse_proxy prices:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

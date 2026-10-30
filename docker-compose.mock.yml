@@ -1,0 +1,30 @@
+# Runs the whole stack against fake exchanges and a fake CoinGecko, for
+# testing without network access or API keys:
+#   POSTGRES_PASSWORD=dev docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
+# then open http://localhost:8000
+services:
+  mock-feeds:
+    build:
+      context: .
+      dockerfile: apps/prices/Dockerfile
+    command: ["node", "dist/dev/mock-feeds.js"]
+
+  prices:
+    environment:
+      COINGECKO_BASE_URL: http://mock-feeds:9100/api/v3
+      COINGECKO_MIN_GAP_MS: "100"
+      COINBASE_REST_URL: http://mock-feeds:9100
+      COINBASE_WS_URL: ws://mock-feeds:9101
+      KRAKEN_WS_URL: ws://mock-feeds:9102
+    depends_on:
+      mock-feeds: { condition: service_started }
+
+  web:
+    environment:
+      SITE_URL: http://localhost:8000
+
+  caddy:
+    ports: !override
+      - "8000:80"
+    environment:
+      SITE_ADDRESS: ":80"
