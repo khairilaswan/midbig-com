@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { formatUsd, type AlertDirection } from "@midbig/shared";
+import { assetClassOf, assetPath, formatAssetPrice, type AlertDirection } from "@midbig/shared";
 import { createAlert, deleteAlert } from "@/app/actions";
 import type { AssetRow } from "@/lib/types";
 import type { AlertRow } from "@/lib/user-data";
@@ -32,7 +32,7 @@ export function AlertForm({ initialCoin, emailEnabled }: { initialCoin: PickedCo
       className="form"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!coin) return setError("Pick a coin first.");
+        if (!coin) return setError("Pick a coin, stock or pair first.");
         setBusy(true);
         setError("");
         const res = await createAlert({ assetId: coin.id, direction: dir, target: t, notifyEmail: email });
@@ -44,10 +44,10 @@ export function AlertForm({ initialCoin, emailEnabled }: { initialCoin: PickedCo
       }}
     >
       <label>
-        Coin
-        <CoinField coin={coin} onChange={setCoin} />
+        Coin, stock or forex pair
+        <CoinField coin={coin} onChange={setCoin} classes={["crypto", "stock", "forex"]} />
       </label>
-      {coin?.price != null && <p className="muted small">Now {formatUsd(coin.price)}</p>}
+      {coin?.price != null && <p className="muted small">Now {formatAssetPrice(coin.id, coin.price)}</p>}
       <div className="form-row">
         <label>
           Tell me when the price goes
@@ -57,7 +57,7 @@ export function AlertForm({ initialCoin, emailEnabled }: { initialCoin: PickedCo
           </select>
         </label>
         <label>
-          Target price (USD)
+          {coin && assetClassOf(coin.id) === "forex" ? "Target rate" : "Target price (USD)"}
           <input inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} required />
         </label>
       </div>
@@ -88,16 +88,16 @@ export function AlertList({ alerts, assets }: { alerts: AlertRow[]; assets: Asse
         return (
           <li key={a.id} className={a.triggeredAt ? "done" : ""}>
             <div>
-              <Link href={`/coins/${a.assetId}`}>
+              <Link href={assetPath(a.assetId)}>
                 <strong>{asset?.symbol ?? a.assetId}</strong>
               </Link>{" "}
-              {a.direction} <strong>{formatUsd(a.target)}</strong>
+              {a.direction} <strong>{formatAssetPrice(a.assetId, a.target)}</strong>
               {a.notifyEmail && <span className="muted small"> · email</span>}
             </div>
             <div className="muted small">
               {a.triggeredAt
-                ? `Hit ${formatUsd(a.triggeredPrice)} on ${when(a.triggeredAt)}`
-                : `Waiting · now ${formatUsd(price)}`}
+                ? `Hit ${formatAssetPrice(a.assetId, a.triggeredPrice)} on ${when(a.triggeredAt)}`
+                : `Waiting · now ${formatAssetPrice(a.assetId, price)}`}
             </div>
             <button
               type="button"

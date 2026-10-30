@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { formatUsd } from "@midbig/shared";
+import { formatUsd, type AssetClass } from "@midbig/shared";
 import { addTxn } from "@/app/actions";
 import { CoinLogo } from "./market";
 import { SearchBox, type SearchResult } from "./search-box";
@@ -30,10 +30,19 @@ function num(v: FormDataEntryValue | null): number {
   return s === "" ? NaN : Number(s);
 }
 
-/** Picks a coin from search, or shows the one already chosen. */
-export function CoinField({ coin, onChange }: { coin: PickedCoin | null; onChange: (c: PickedCoin | null) => void }) {
+/** Picks an asset from search (coins and stocks unless `classes` says otherwise), or shows the one chosen. */
+export function CoinField({
+  coin,
+  onChange,
+  classes = ["crypto", "stock"],
+}: {
+  coin: PickedCoin | null;
+  onChange: (c: PickedCoin | null) => void;
+  classes?: AssetClass[];
+}) {
   if (!coin) {
-    return <SearchBox placeholder="Search for a coin" onPick={(r: SearchResult) => onChange(r)} />;
+    const placeholder = classes.includes("forex") ? "Search coins, stocks, forex" : "Search for a coin or stock";
+    return <SearchBox placeholder={placeholder} classes={classes} onPick={(r: SearchResult) => onChange(r)} />;
   }
   return (
     <div className="picked">
@@ -98,7 +107,7 @@ export function TxnForm({ initialCoin, onDone }: { initialCoin: PickedCoin | nul
         ))}
       </div>
       <label>
-        Coin
+        Coin or stock
         <CoinField
           coin={coin}
           onChange={(c) => {

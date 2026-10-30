@@ -1,17 +1,23 @@
 /**
- * Local stand-in for CoinGecko, Coinbase and Kraken, for development and
- * tests without network access. It speaks just enough of each protocol for
- * the price service: CoinGecko /coins/markets and /market_chart, Coinbase
- * /products plus the ticker/heartbeat feed, and Kraken v2 instrument/trade.
+ * Local stand-in for CoinGecko, Coinbase, Kraken and Finnhub, for development
+ * and tests without network access. It speaks just enough of each protocol
+ * for the price service: CoinGecko /coins/markets and /market_chart, Coinbase
+ * /products plus the ticker/heartbeat feed, Kraken v2 instrument/trade, and
+ * Finnhub's REST API (under /finnhub/api/v1) and trade stream.
  *
- *   pnpm dev:mock    # HTTP on :9100, Coinbase WS on :9101, Kraken WS on :9102
+ *   pnpm dev:mock    # HTTP on :9100, Coinbase WS on :9101, Kraken WS on :9102, Finnhub WS on :9103
  */
 import http from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
+import { forexStatus, FOREX_PAIRS, usStockStatus } from "@midbig/shared";
+import { SP500 } from "../data/sp500.js";
 
 const HTTP_PORT = Number(process.env.MOCK_HTTP_PORT ?? 9100);
 const COINBASE_PORT = Number(process.env.MOCK_COINBASE_PORT ?? 9101);
 const KRAKEN_PORT = Number(process.env.MOCK_KRAKEN_PORT ?? 9102);
+const FINNHUB_PORT = Number(process.env.MOCK_FINNHUB_PORT ?? 9103);
+/** Trade stocks and forex even when their real markets are closed, for testing at any hour. */
+const ALWAYS_OPEN = process.env.MOCK_MARKETS_ALWAYS_OPEN === "true";
 
 interface Coin {
   id: string;
@@ -86,6 +92,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
+  if (url.pathname.startsWith("/finnhub/api/v1/")) return finnhubRest(url, json, res);
   if (url.pathname === "/api/v3/coins/markets") {
     const perPage = Number(url.searchParams.get("per_page") ?? 100);
     const page = Number(url.searchParams.get("page") ?? 1);
@@ -216,3 +223,131 @@ function trade(symbol: string, price: number, ts: number) {
     timestamp: new Date(ts).toISOString().replace("Z", "456Z"),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Finnhub: S&P 500 stocks and OANDA forex pairs.
+
+interface Stock {
+  ticker: string;
+  price: number;
+  prevClose: number;
+  shares: number;
+}
+
+/** Stable pseudo-random number in [0, 1) from a string. */
+function hash01(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 100000) / 100000;
+}
+
+const stocks = new Map<string, Stock>(
+  SP500.map(([ticker]) => {
+    const price = Number((20 + hash01(ticker) * 580).toFixed(2));
+    return [ticker, { ticker, price, prevClose: Number((price * (1 + (hash01(ticker + "pc") - 0.5) * 0.04)).toFixed(2)), shares: (0.1 + hash01(ticker + "s") * 5) * 1e9 }];
+  }),
+);
+const usdRates: Record<string, number> = {
+  EUR: 0.92, JPY: 151.2, GBP: 0.79, CHF: 0.88, AUD: 1.52, CAD: 1.37, NZD: 1.66, MXN: 18.5, CNH: 7.2, HKD: 7.8,
+  SGD: 1.34, ZAR: 18.2, TRY: 34.1, SEK: 10.6, NOK: 10.9, PLN: 4.0, THB: 35.5,
+};
+const pairRate = (base: string, quote: string) => (quote === "USD" ? 1 : usdRates[quote]!) / (base === "USD" ? 1 : usdRates[base]!);
+const forexPrices = new Map(FOREX_PAIRS.map((p) => [`OANDA:${p.base}_${p.quote}`, pairRate(p.base, p.quote)]));
+
+function finnhubRest(url: URL, json: (body: unknown) => void, res: http.ServerResponse): void {
+  const path = url.pathname.slice("/finnhub/api/v1".length);
+  const symbol = url.searchParams.get("symbol") ?? "";
+  const stock = stocks.get(symbol);
+  if (path === "/quote") {
+    if (!stock) return json({ c: 0, d: null, dp: null, h: 0, l: 0, o: 0, pc: 0, t: 0 });
+    return json({
+      c: stock.price,
+      d: stock.price - stock.prevClose,
+      dp: (stock.price / stock.prevClose - 1) * 100,
+      h: Math.max(stock.price, stock.prevClose) * 1.01,
+      l: Math.min(stock.price, stock.prevClose) * 0.99,
+      o: stock.prevClose * 1.002,
+      pc: stock.prevClose,
+      t: Math.floor(Date.now() / 1000),
+    });
+  }
+  if (path === "/stock/profile2") {
+    if (!stock) return json({});
+    return json({
+      ticker: symbol,
+      name: symbol,
+      exchange: hash01(symbol + "x") > 0.5 ? "NASDAQ NMS - GLOBAL MARKET" : "NEW YORK STOCK EXCHANGE, INC.",
+      logo: "",
+      weburl: `https://www.example.com/${symbol.toLowerCase()}`,
+      finnhubIndustry: "Technology",
+      marketCapitalization: (stock.price * stock.shares) / 1e6,
+      shareOutstanding: stock.shares / 1e6,
+    });
+  }
+  if (path === "/stock/metric") {
+    if (!stock) return json({ metric: {} });
+    return json({
+      metric: {
+        "52WeekHigh": stock.price * 1.3,
+        "52WeekLow": stock.price * 0.7,
+        peTTM: 10 + hash01(symbol + "pe") * 40,
+        beta: Number((0.5 + hash01(symbol + "b") * 1.3).toFixed(2)),
+        currentDividendYieldTTM: hash01(symbol + "d") * 4,
+        "10DayAverageTradingVolume": 1 + hash01(symbol + "v") * 30,
+      },
+    });
+  }
+  if (path === "/forex/rates") return json({ base: "USD", quote: usdRates });
+  if (path === "/stock/candle" || path === "/forex/candle") {
+    const base = stock?.price ?? forexPrices.get(symbol);
+    if (base == null) return json({ s: "no_data" });
+    const from = Number(url.searchParams.get("from"));
+    const to = Number(url.searchParams.get("to"));
+    const t: number[] = [];
+    const c: number[] = [];
+    for (let day = Math.ceil(from / 86400); day * 86400 <= to; day++) {
+      const wd = new Date(day * 86400_000).getUTCDay();
+      if (wd === 0 || wd === 6) continue;
+      const left = (to - day * 86400) / 86400;
+      t.push(day * 86400);
+      c.push(base * (1 + Math.sin(left / 15 + hash01(symbol) * 6) * 0.08 - left / 1500));
+    }
+    return json({ s: "ok", t, c, v: c.map(() => 1e6) });
+  }
+  res.writeHead(404).end();
+}
+
+// Finnhub trade stream: trades only while each market is open, a ping every 5 seconds.
+const fh = new WebSocketServer({ port: FINNHUB_PORT });
+fh.on("connection", (ws: WebSocket) => {
+  const subscribed = new Set<string>();
+  ws.on("message", (raw) => {
+    const msg = JSON.parse(raw.toString());
+    if (msg.type === "subscribe" && typeof msg.symbol === "string") subscribed.add(msg.symbol);
+    if (msg.type === "unsubscribe") subscribed.delete(msg.symbol);
+  });
+  let n = 0;
+  const timer = setInterval(() => {
+    if (++n % 5 === 0) ws.send(JSON.stringify({ type: "ping" }));
+    const now = Date.now();
+    const stocksOpen = ALWAYS_OPEN || usStockStatus(now).phase === "open";
+    const fxOpen = ALWAYS_OPEN || forexStatus(now).phase === "open";
+    const data = [];
+    for (const s of subscribed) {
+      const stock = stocks.get(s);
+      if (stock && stocksOpen && Math.random() < 0.5) {
+        stock.price = Number((stock.price * (1 + (Math.random() - 0.5) * 0.002)).toFixed(2));
+        data.push({ s, p: stock.price, t: now, v: Math.floor(Math.random() * 500) + 1, c: ["1"] });
+      }
+      const fx = forexPrices.get(s);
+      if (fx != null && fxOpen && Math.random() < 0.7) {
+        const p = fx * (1 + (Math.random() - 0.5) * 0.0004);
+        forexPrices.set(s, p);
+        data.push({ s, p, t: now, v: 0 });
+      }
+    }
+    if (data.length > 0) ws.send(JSON.stringify({ type: "trade", data }));
+  }, 1000);
+  ws.on("close", () => clearInterval(timer));
+});
+console.log(`mock Finnhub WS on :${FINNHUB_PORT}`);

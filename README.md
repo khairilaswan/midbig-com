@@ -1,19 +1,20 @@
 # midbig.com
 
-Live crypto prices, charts and market caps, built to run on one small server.
-Phase 1 of the MVP plan is the price site; Phase 2 adds accounts, a watchlist, a
-portfolio tracker, a what-if simulator, price alerts and an installable app;
-Phase 3 adds live chat with a scam filter and moderation, two-factor login and
-the legal pages needed to launch. Crypto only for now, with forex and US stocks
-to follow.
+Live crypto, US stock and forex prices, charts and market caps, built to run on
+one small server. Phase 1 of the MVP plan is the price site; Phase 2 adds
+accounts, a watchlist, a portfolio tracker, a what-if simulator, price alerts
+and an installable app; Phase 3 adds live chat with a scam filter and
+moderation, two-factor login and the legal pages needed to launch; Phase 4 adds
+S&P 500 stocks and 30 forex pairs, switched on by a Finnhub API key.
 
 ## How it works
 
 ```
 Coinbase WS ─┐                      ┌─ Redis hash "prices" ─── web (Next.js) renders pages
-Kraken WS ───┼─ prices service ─────┤
-CoinGecko ───┘   (Node)             ├─ Redis pub/sub "ticks" ─ /ws gateway ─ browsers (live updates)
-                                    └─ Postgres + TimescaleDB (assets, 1-minute candles, history)
+Kraken WS ───┤                      │
+CoinGecko ───┼─ prices service ─────┼─ Redis pub/sub "ticks" ─ /ws gateway ─ browsers (live updates)
+Finnhub WS ──┤   (Node)             │
+Finnhub REST ┘                      └─ Postgres + TimescaleDB (assets, 1-minute candles, history)
 ```
 
 - **apps/prices** is one Node process that:
@@ -85,19 +86,51 @@ small always-on server: the web app needs `DATABASE_URL`, `REDIS_URL`, `PUBLIC_W
   and "Download my data" on the account page. The texts are a starting point; have a lawyer read them before
   launch. Questions and takedowns go to `support@midbig.com` (`CONTACT_EMAIL` in `apps/web/lib/site.ts`).
 
+### Stocks and forex (Phase 4)
+
+Off until `FINNHUB_API_KEY` is set; with it, the price service:
+
+- puts the S&P 500 (`apps/prices/src/data/sp500.ts`, refresh it when the index changes) and 30 forex pairs
+  (`FOREX_PAIRS` in `packages/shared/src/markets.ts`) in the `assets` table, with ids like `stock-aapl` and
+  `fx-eur-usd`; pages live at `/stocks/aapl` and `/forex/eur-usd`;
+- streams trades for as many symbols as the plan allows (`FINNHUB_WS_SYMBOLS`): every forex pair first, then the
+  biggest stocks;
+- walks the stock list in market cap order within `FINNHUB_CALLS_PER_MINUTE`: a quote for each (price, previous
+  close, day range), plus the company profile and ratios (shares, logo, P/E, beta, dividend yield, 52-week range)
+  once a day. Stocks off the stream use that quote and show "Delayed";
+- reads all forex reference rates in one call every 5 minutes and works out each pair's 24-hour change from the
+  stored candles;
+- builds the 7-day sparkline and change for stocks and forex from its own hourly candles every 15 minutes;
+- backfills a year of daily closes when the plan includes it (Finnhub's candles are a paid feature; on the free
+  plan charts fill in from live trades).
+
+Stocks show their change since the previous close ("Today"). Market hours and US holidays are in
+`packages/shared/src/markets.ts` (update the holiday list each December): outside regular hours a stock is marked
+"Market closed" with its last trade instead of "Delayed", and forex closes from Friday to Sunday 5 pm New York time.
+
+Stocks work in the watchlist, portfolio, alerts and the what-if simulator, where they follow an S&P 500 move by
+their published beta ("Stock market falls: S&P 500 −20%"). Forex pairs can be watched and alerted on; they stay out
+of the portfolio because a rate isn't a dollar price.
+
+The free Finnhub plan is for personal use. Before showing stock or forex prices to the public, move to a paid plan
+whose licence allows display, then set `FINNHUB_CALLS_PER_MINUTE` and `FINNHUB_WS_SYMBOLS=600` to its limits.
+
 ### The 1-minute freshness rule
 
 A price shows a green dot while an exchange connection that quotes the coin has spoken in the last 60 seconds.
 No trade on a live connection means the last trade is still the price. If the feed goes quiet, the price turns
 amber and says "Delayed · updated Xm ago". Coins that neither Coinbase nor Kraken lists show CoinGecko's price,
-refreshed every 15 minutes, and are always marked delayed. `/ws/health` returns 503 when either feed has been
-silent for more than 60 seconds, so an uptime monitor can alert on it.
+refreshed every 15 minutes, and are always marked delayed. `/ws/health` returns 503 when any feed has been
+silent for more than 60 seconds (Finnhub only counts while a stock or forex market is open), so an uptime monitor
+can alert on it.
 
 ## Run it locally
 
 Needs Node 22, pnpm 10 and Docker.
 
-Everything in Docker, against fake exchanges (no internet or API keys needed):
+Everything in Docker, against fake exchanges, CoinGecko and Finnhub (no internet or API keys needed). The fake
+stocks and forex only trade during real market hours; add `MOCK_MARKETS_ALWAYS_OPEN=true` to see them move at
+night and on weekends:
 
 ```sh
 POSTGRES_PASSWORD=dev docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
@@ -117,7 +150,9 @@ PUBLIC_WS_URL=ws://localhost:8080/ws pnpm dev:web # http://localhost:3000
 ```
 
 To use the fake feeds instead, run `pnpm dev:mock` and start the price service with
-`COINGECKO_BASE_URL=http://localhost:9100/api/v3 COINBASE_REST_URL=http://localhost:9100 COINBASE_WS_URL=ws://localhost:9101 KRAKEN_WS_URL=ws://localhost:9102`.
+`COINGECKO_BASE_URL=http://localhost:9100/api/v3 COINBASE_REST_URL=http://localhost:9100 COINBASE_WS_URL=ws://localhost:9101 KRAKEN_WS_URL=ws://localhost:9102`,
+plus `FINNHUB_API_KEY=mock FINNHUB_BASE_URL=http://localhost:9100/finnhub/api/v1 FINNHUB_WS_URL=ws://localhost:9103`
+for stocks and forex.
 
 Checks: `pnpm typecheck` and `pnpm test`.
 
@@ -152,6 +187,10 @@ Set in `.env` (see `.env.example`). The price service also reads these optional 
 | `COINGECKO_SYNC_MINUTES` | 15 | Minutes between market data refreshes (about 5,800 calls a month at 500 coins) |
 | `COINGECKO_BACKFILL_DAYS` | 365 | Days of daily history fetched once per coin |
 | `COINBASE_ENABLED`, `KRAKEN_ENABLED` | true | Turn a feed off |
+| `FINNHUB_API_KEY` | empty | Turns on S&P 500 stocks and forex |
+| `FINNHUB_CALLS_PER_MINUTE` | 50 | REST calls a minute (free plan: 60) |
+| `FINNHUB_WS_SYMBOLS` | 50 | Symbols on the live stream (free plan: 50; paid: set 600) |
+| `FINNHUB_BACKFILL_DAYS` | 365 | Days of daily history fetched once per stock or pair (paid plans) |
 
 Accounts and alerts (web and price service):
 

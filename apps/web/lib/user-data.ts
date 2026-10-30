@@ -1,6 +1,6 @@
 import "server-only";
 import webpush from "web-push";
-import { VAPID_PRIVATE, VAPID_PUBLIC, type AlertDirection, type PushPayload, type Txn } from "@midbig/shared";
+import { assetClassOf, VAPID_PRIVATE, VAPID_PUBLIC, type AlertDirection, type PushPayload, type Txn } from "@midbig/shared";
 import { cached, livePrices, pool, ROW_COLUMNS, toRow, type RowRecord } from "./server";
 import { SITE_URL } from "./site";
 import type { AssetRow } from "./types";
@@ -136,6 +136,13 @@ export async function getRiskHistory(ids: string[]): Promise<RiskHistory> {
     const closes: Record<string, (number | null)[]> = {};
     for (const id of sorted) closes[id] = new Array(days.length).fill(null);
     for (const r of res.rows) closes[r.asset_id]![index.get(r.day)!] = r.close;
+    // Stocks and forex don't trade on weekends and holidays: carry the last close over those days, so the
+    // next trading day's move counts and the closed days count as no move, like a coin that stood still.
+    for (const id of sorted) {
+      if (assetClassOf(id) === "crypto") continue;
+      const c = closes[id]!;
+      for (let i = 1; i < c.length; i++) if (c[i] == null && c[i - 1] != null) c[i] = c[i - 1]!;
+    }
     return { days, closes };
   });
 }

@@ -388,6 +388,14 @@ table.market {
   background: var(--delayed);
 }
 
+.fresh.closed {
+  color: var(--muted);
+}
+
+.fresh.closed i {
+  background: var(--muted);
+}
+
 .pager {
   display: flex;
   flex-wrap: wrap;
@@ -604,7 +612,8 @@ table.market {
   }
   .market .coin .sym,
   .market .rank,
-  .market .fresh.delayed span {
+  .market .fresh.delayed span,
+  .market .fresh.closed span {
     display: none;
   }
   .market .coin .name {

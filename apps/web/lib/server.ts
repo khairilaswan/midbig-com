@@ -1,7 +1,7 @@
 import "server-only";
 import { Redis } from "ioredis";
 import pg from "pg";
-import { PRICES_KEY, type LivePrice } from "@midbig/shared";
+import { PRICES_KEY, type AssetClass, type LivePrice } from "@midbig/shared";
 import type { AssetDetail, AssetRow } from "./types";
 
 // Reuse connections across hot reloads in dev and across requests in prod.
@@ -53,11 +53,16 @@ export async function livePrices(ids: string[]): Promise<Map<string, LivePrice>>
   return out;
 }
 
-export const ROW_COLUMNS = `id, symbol, name, image_url, market_cap_rank, market_cap, total_volume, circulating_supply,
-  ref_price, price_change_pct_24h, price_change_pct_7d, sparkline_7d, metadata_updated_at`;
+export const ROW_COLUMNS = `id, asset_class, symbol, name, image_url, market_cap_rank, market_cap, total_volume,
+  circulating_supply, ref_price, price_change_pct_24h, price_change_pct_7d, sparkline_7d, sector,
+  (details->>'beta')::float8 AS beta,
+  COALESCE(quote_updated_at, metadata_updated_at) AS metadata_updated_at`;
 
 export interface RowRecord {
   id: string;
+  asset_class: AssetClass;
+  sector: string | null;
+  beta: number | null;
   symbol: string;
   name: string;
   image_url: string | null;
@@ -81,6 +86,9 @@ function refFromPct(price: number | null, pct: number | null): number | null {
 export function toRow(r: RowRecord, live: LivePrice | undefined): AssetRow {
   return {
     id: r.id,
+    assetClass: r.asset_class,
+    sector: r.sector,
+    beta: r.beta,
     symbol: r.symbol.toUpperCase(),
     name: r.name,
     image: r.image_url,
@@ -97,17 +105,21 @@ export function toRow(r: RowRecord, live: LivePrice | undefined): AssetRow {
   };
 }
 
-export async function getMarketPage(page: number): Promise<{ rows: AssetRow[]; total: number }> {
-  const base = await cached(`market:${page}`, 15_000, async () => {
+export async function getMarketPage(
+  page: number,
+  cls: AssetClass = "crypto",
+): Promise<{ rows: AssetRow[]; total: number }> {
+  const base = await cached(`market:${cls}:${page}`, 15_000, async () => {
     const [rows, count] = await Promise.all([
       pool().query<RowRecord>(
         `SELECT ${ROW_COLUMNS} FROM assets
-         WHERE asset_class = 'crypto' AND market_cap_rank IS NOT NULL
+         WHERE asset_class = $3 AND market_cap_rank IS NOT NULL
          ORDER BY market_cap_rank LIMIT $1 OFFSET $2`,
-        [PAGE_SIZE, (page - 1) * PAGE_SIZE],
+        [PAGE_SIZE, (page - 1) * PAGE_SIZE, cls],
       ),
       pool().query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM assets WHERE asset_class = 'crypto' AND market_cap_rank IS NOT NULL`,
+        `SELECT count(*)::int AS n FROM assets WHERE asset_class = $1 AND market_cap_rank IS NOT NULL`,
+        [cls],
       ),
     ]);
     return { rows: rows.rows, total: count.rows[0]?.n ?? 0 };
@@ -117,18 +129,22 @@ export async function getMarketPage(page: number): Promise<{ rows: AssetRow[]; t
 }
 
 /**
- * Biggest 24h movers among ranked coins with real trading volume. Sorted by
- * the provider's 24h change at the last sync; live prices update the figures.
+ * Biggest 24h movers among ranked assets with real trading volume (for
+ * stocks, the move since the previous close). Sorted by the provider's change
+ * at the last sync; live prices update the figures.
  */
-export async function getMovers(limit: number): Promise<{ gainers: AssetRow[]; losers: AssetRow[] }> {
-  const base = await cached(`movers:${limit}`, 60_000, async () => {
+export async function getMovers(
+  limit: number,
+  cls: AssetClass = "crypto",
+): Promise<{ gainers: AssetRow[]; losers: AssetRow[] }> {
+  const base = await cached(`movers:${cls}:${limit}`, 60_000, async () => {
     const q = (dir: "DESC" | "ASC") =>
       pool().query<RowRecord>(
         `SELECT ${ROW_COLUMNS} FROM assets
-         WHERE asset_class = 'crypto' AND market_cap_rank IS NOT NULL
-           AND total_volume >= 50000 AND price_change_pct_24h IS NOT NULL
+         WHERE asset_class = $2 AND market_cap_rank IS NOT NULL
+           AND (asset_class = 'forex' OR total_volume >= 50000) AND price_change_pct_24h IS NOT NULL
          ORDER BY price_change_pct_24h ${dir} LIMIT $1`,
-        [limit],
+        [limit, cls],
       );
     const [g, l] = await Promise.all([q("DESC"), q("ASC")]);
     return { gainers: g.rows, losers: l.rows };
@@ -151,9 +167,12 @@ export async function getAsset(id: string): Promise<AssetDetail | null> {
         ath_date: Date | null;
         atl: number | null;
         atl_date: Date | null;
+        exchange: string | null;
+        details: Record<string, number | string>;
       }
     >(
-      `SELECT ${ROW_COLUMNS}, fully_diluted_valuation, total_supply, max_supply, ath, ath_date, atl, atl_date
+      `SELECT ${ROW_COLUMNS}, fully_diluted_valuation, total_supply, max_supply, ath, ath_date, atl, atl_date,
+         exchange, details
        FROM assets WHERE id = $1`,
       [id],
     );
@@ -170,41 +189,55 @@ export async function getAsset(id: string): Promise<AssetDetail | null> {
     athDate: r.ath_date ? r.ath_date.getTime() : null,
     atl: r.atl,
     atlDate: r.atl_date ? r.atl_date.getTime() : null,
+    exchange: r.exchange,
+    details: r.details ?? {},
   };
 }
 
 export async function getAllAssetIds(): Promise<{ id: string; updatedAt: Date | null }[]> {
+  // Stocks and forex only once their data is flowing, so the sitemap never lists empty pages.
   const res = await pool().query<{ id: string; metadata_updated_at: Date | null }>(
-    `SELECT id, metadata_updated_at FROM assets WHERE asset_class = 'crypto' ORDER BY market_cap_rank NULLS LAST`,
+    `SELECT id, metadata_updated_at FROM assets
+     WHERE asset_class = 'crypto' OR ref_price IS NOT NULL
+     ORDER BY asset_class, market_cap_rank NULLS LAST`,
   );
   return res.rows.map((r) => ({ id: r.id, updatedAt: r.metadata_updated_at }));
 }
 
-export async function searchAssets(q: string) {
+/** Classes in search results: everything, or only what a form can take. */
+export async function searchAssets(q: string, classes: AssetClass[] = ["crypto", "stock", "forex"]) {
   const term = q.trim().slice(0, 50);
   if (!term) return [];
   const like = term.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+  // "eurusd" and "eur usd" find EUR/USD.
+  const pairLike = /^[a-z]{3}[\s/]?[a-z]{3}$/i.test(term) ? `${term.slice(0, 3)}/${term.slice(-3)}` : null;
   const res = await pool().query<{
     id: string;
+    asset_class: AssetClass;
     symbol: string;
     name: string;
     image_url: string | null;
     market_cap_rank: number | null;
     ref_price: number | null;
+    beta: number | null;
   }>(
-    `SELECT id, symbol, name, image_url, market_cap_rank, ref_price FROM assets
-     WHERE symbol ILIKE $1 OR name ILIKE $1 OR name ILIKE '% ' || $1
-     ORDER BY lower(symbol) = lower($2) DESC, market_cap_rank NULLS LAST
+    `SELECT id, asset_class, symbol, name, image_url, market_cap_rank, ref_price, (details->>'beta')::float8 AS beta
+     FROM assets
+     WHERE asset_class = ANY($3) AND (asset_class = 'crypto' OR ref_price IS NOT NULL)
+       AND (symbol ILIKE $1 OR name ILIKE $1 OR name ILIKE '% ' || $1 OR symbol ILIKE $4)
+     ORDER BY lower(symbol) = lower($2) OR lower(symbol) = lower($4) DESC, market_cap_rank NULLS LAST
      LIMIT 8`,
-    [like, term],
+    [like, term, classes, pairLike],
   );
   const live = await livePrices(res.rows.map((r) => r.id));
   return res.rows.map((r) => ({
     id: r.id,
+    assetClass: r.asset_class,
     symbol: r.symbol.toUpperCase(),
     name: r.name,
     image: r.image_url,
     rank: r.market_cap_rank,
+    beta: r.beta,
     price: live.get(r.id)?.p ?? r.ref_price,
   }));
 }

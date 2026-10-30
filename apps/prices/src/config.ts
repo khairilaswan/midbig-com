@@ -52,6 +52,22 @@ export const config = {
     vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
   },
 
+  /**
+   * US stocks (S&P 500) and forex from Finnhub. Off until FINNHUB_API_KEY is
+   * set. The free key is for personal use (fine on your own computer); a
+   * public site needs a paid plan that allows display.
+   */
+  finnhub: {
+    apiKey: process.env.FINNHUB_API_KEY ?? "",
+    baseUrl: env("FINNHUB_BASE_URL", "https://finnhub.io/api/v1"),
+    wsUrl: env("FINNHUB_WS_URL", "wss://ws.finnhub.io"),
+    /** REST calls per minute; the free plan allows 60. */
+    callsPerMinute: envInt("FINNHUB_CALLS_PER_MINUTE", 50),
+    /** Symbols on the live trade stream; the free plan allows 50. Paid plans: set to 600. */
+    wsMaxSymbols: envInt("FINNHUB_WS_SYMBOLS", 50),
+    backfillDays: envInt("FINNHUB_BACKFILL_DAYS", 365),
+  },
+
   kraken: {
     wsUrl: env("KRAKEN_WS_URL", "wss://ws.kraken.com/v2"),
     enabled: env("KRAKEN_ENABLED", "true") === "true",

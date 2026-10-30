@@ -119,7 +119,7 @@ export function downsample(values: number[], n: number): number[] {
 export async function backfillHistory(pool: pg.Pool, cg: CoinGeckoClient, days: number): Promise<void> {
   const { rows } = await pool.query<{ id: string }>(
     `SELECT a.id FROM assets a
-     WHERE a.market_cap_rank IS NOT NULL
+     WHERE a.asset_class = 'crypto' AND a.market_cap_rank IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM history_daily h WHERE h.asset_id = a.id)
      ORDER BY a.market_cap_rank`,
   );

@@ -11,7 +11,9 @@ import { backfillHistory, buildSymbolMap, loadTrackedAssets, syncMarkets } from 
 import { startCandleWriter, startPublisher } from "./publisher.js";
 import { CoinbaseFeed } from "./sources/coinbase.js";
 import type { Feed } from "./sources/feed.js";
+import { FinnhubClient, FinnhubFeed } from "./sources/finnhub.js";
 import { KrakenFeed } from "./sources/kraken.js";
+import { loadFeedCandidates, pickStreamSymbols, seedStockForexAssets, StockForexSync } from "./stocks-forex.js";
 
 const log = logger("main");
 
@@ -39,6 +41,28 @@ async function main(): Promise<void> {
     feeds.push(new CoinbaseFeed(config.coinbase.wsUrl, config.coinbase.restUrl, state, () => symbols));
   }
   if (config.kraken.enabled) feeds.push(new KrakenFeed(config.kraken.wsUrl, state, () => symbols));
+
+  // Stocks and forex, when a Finnhub key is set.
+  let stockForex: StockForexSync | null = null;
+  let finnhubSymbols = new Map<string, string>();
+  let finnhubFeed: FinnhubFeed | null = null;
+  const fh = config.finnhub;
+  if (fh.apiKey) {
+    await retry("stock and forex list", () => seedStockForexAssets(pool));
+    const client = new FinnhubClient(fh.baseUrl, fh.apiKey, fh.callsPerMinute);
+    stockForex = new StockForexSync(pool, client, {
+      wsMaxSymbols: fh.wsMaxSymbols,
+      profileMaxAgeHours: 24,
+      backfillDays: fh.backfillDays,
+    });
+    stockForex.start();
+    finnhubSymbols = pickStreamSymbols(await loadFeedCandidates(pool), fh.wsMaxSymbols);
+    const wsUrl = `${fh.wsUrl}${fh.wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(fh.apiKey)}`;
+    finnhubFeed = new FinnhubFeed(wsUrl, state, () => finnhubSymbols);
+    feeds.push(finnhubFeed);
+  } else {
+    log.info("FINNHUB_API_KEY not set: stocks and forex are off");
+  }
   for (const f of feeds) f.start();
 
   const stopPublisher = startPublisher(state, redis);
@@ -53,6 +77,7 @@ async function main(): Promise<void> {
       const sources = state.sourcesStatus(now);
       const prices = state.all();
       const feedsOk = feeds.every((f) => {
+        if (!f.expectsTraffic()) return true;
         const ago = sources[f.name]?.lastMessageAgoMs;
         return ago != null && ago <= MAX_PRICE_AGE_MS;
       });
@@ -79,6 +104,17 @@ async function main(): Promise<void> {
       })
       .catch((err) => log.error("market data sync failed", err));
   const syncTimer = setInterval(refresh, config.coingecko.syncMinutes * 60_000);
+
+  // Stocks move up and down the market cap ranking; keep the capped stream on the biggest.
+  const refreshStream = async () => {
+    if (!finnhubFeed) return;
+    const next = pickStreamSymbols(await loadFeedCandidates(pool), fh.wsMaxSymbols);
+    if (sameMap(next, finnhubSymbols)) return;
+    finnhubSymbols = next;
+    log.info("stock stream list changed, resubscribing");
+    finnhubFeed.restart();
+  };
+  const streamTimer = setInterval(() => void refreshStream().catch((err) => log.error("stream refresh failed", err)), 15 * 60_000);
   if (lastSync === 0) setTimeout(refresh, 5_000);
 
   // One-off history backfill for new coins, checked daily.
@@ -94,6 +130,8 @@ async function main(): Promise<void> {
     log.info(`${signal} received, shutting down`);
     clearInterval(syncTimer);
     clearInterval(backfillTimer);
+    clearInterval(streamTimer);
+    stockForex?.stop();
     for (const f of feeds) f.stop();
     stopPublisher();
     await stopAlerts();

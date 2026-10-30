@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AreaSeries, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
-import type { LivePrice } from "@midbig/shared";
+import { assetClassOf, forexDecimals, type LivePrice } from "@midbig/shared";
 import { useLivePrice } from "./live";
 
 const RANGES = [
@@ -68,7 +68,12 @@ export function PriceChart({ id, initialLive }: { id: string; initialLive: LiveP
         const data = points.map(([t, v]) => ({ time: t as UTCTimestamp, value: v }));
         series.setData(data);
         const maxV = Math.max(...points.map((p) => p[1]), 0);
-        const precision = maxV >= 1 ? 2 : Math.min(10, Math.max(4, -Math.floor(Math.log10(maxV || 1)) + 3));
+        const precision =
+          assetClassOf(id) === "forex"
+            ? forexDecimals(maxV)
+            : maxV >= 1
+              ? 2
+              : Math.min(10, Math.max(4, -Math.floor(Math.log10(maxV || 1)) + 3));
         series.applyOptions({ priceFormat: { type: "price", precision, minMove: 10 ** -precision } });
         lastTime.current = data.at(-1)?.time ?? 0;
         chartRef.current?.timeScale().fitContent();
@@ -102,7 +107,9 @@ export function PriceChart({ id, initialLive }: { id: string; initialLive: LiveP
         </div>
       </div>
       <div className="chart" ref={el}>
-        {state === "empty" && <p className="chart-msg">No history yet for this range. It fills in as trades arrive.</p>}
+        {state === "empty" && (
+          <p className="chart-msg">No history yet for this range. It fills in as trades arrive during market hours.</p>
+        )}
         {state === "error" && <p className="chart-msg">Couldn&apos;t load the chart. Try again in a moment.</p>}
       </div>
     </section>

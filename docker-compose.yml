@@ -67,6 +67,9 @@ services:
       DATABASE_URL: postgres://midbig:${POSTGRES_PASSWORD}@postgres:5432/midbig
       REDIS_URL: redis://redis:6379
       COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      FINNHUB_CALLS_PER_MINUTE: ${FINNHUB_CALLS_PER_MINUTE:-50}
+      FINNHUB_WS_SYMBOLS: ${FINNHUB_WS_SYMBOLS:-50}
       SITE_URL: ${SITE_URL:-https://midbig.com}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}

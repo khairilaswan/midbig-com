@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { computeHoldings, formatPct, formatUsd, pctChange, valueHoldings } from "@midbig/shared";
+import { assetPath, computeHoldings, formatPct, formatUsd, pctChange, valueHoldings } from "@midbig/shared";
 import { deleteTxn } from "@/app/actions";
 import type { AssetRow } from "@/lib/types";
 import type { TxnRow } from "@/lib/user-data";
@@ -112,7 +112,7 @@ export function PortfolioView({
           <table className="market holdings">
             <thead>
               <tr>
-                <th>Coin</th>
+                <th>Asset</th>
                 <th className="num">Price</th>
                 <th className="num hide-sm">24h</th>
                 <th className="num">Holdings</th>
@@ -127,7 +127,7 @@ export function PortfolioView({
                 return (
                   <tr key={r.assetId}>
                     <td className="coin">
-                      <Link href={`/coins/${r.assetId}`}>
+                      <Link href={assetPath(r.assetId)}>
                         <CoinLogo src={a?.image ?? null} symbol={a?.symbol ?? "?"} />
                         <span className="name">{a?.name ?? r.assetId}</span>
                         <span className="sym">{a?.symbol}</span>
@@ -170,7 +170,7 @@ export function PortfolioView({
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Coin</th>
+                  <th>Asset</th>
                   <th className="num">Quantity</th>
                   <th className="num hide-sm">Price</th>
                   <th className="num">Total</th>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  assetClassOf,
   betaTo,
   BTC_ID,
   dailyReturns,
@@ -12,6 +13,7 @@ import {
   looksStable,
   presetScenarios,
   runScenario,
+  SPX_ID,
   type Scenario,
   type Shock,
   type SimPosition,
@@ -29,6 +31,8 @@ interface Coin {
   image: string | null;
   /** Price when the coin was added, used until a live price arrives. */
   price: number | null;
+  /** A stock's beta against the S&P 500. */
+  beta?: number | null;
 }
 
 interface Position {
@@ -40,6 +44,8 @@ interface Controls {
   btc: { kind: "price" | "pct"; value: number } | null;
   /** % move for every coin without its own (stablecoins excluded). */
   all: number | null;
+  /** % move for the S&P 500; stocks follow it by their beta. */
+  spx: number | null;
   follow: boolean;
   /** Per-coin % moves typed into the table. */
   overrides: Record<string, number>;
@@ -57,9 +63,11 @@ const BETA_DAYS = 90;
 function controlsFrom(s: Scenario): Controls {
   const btc = s.shocks.find((x) => x.assetId === BTC_ID);
   const all = s.shocks.find((x) => x.assetId === "*");
+  const spx = s.shocks.find((x) => x.assetId === SPX_ID);
   return {
     btc: btc ? { kind: btc.kind, value: btc.value } : null,
     all: all ? all.value : null,
+    spx: spx ? spx.value : null,
     follow: s.followBtc,
     overrides: {},
   };
@@ -161,26 +169,32 @@ export function Simulator({
       const r = dailyReturns(closes);
       const recent = r.slice(-BETA_DAYS);
       const lastClose = [...closes].reverse().find((c) => c != null) ?? null;
+      const isStock = assetClassOf(id) === "stock";
+      const row = rows.get(id);
       out.set(id, {
-        beta: id === BTC_ID ? 1 : betaTo(recent, btcR.slice(-BETA_DAYS)),
-        stable: lastClose != null && looksStable(lastClose, recent),
+        // Stocks use the provider's beta against the S&P 500; coins are measured against Bitcoin here.
+        beta: isStock ? (row?.beta ?? null) : id === BTC_ID ? 1 : betaTo(recent, btcR.slice(-BETA_DAYS)),
+        stable: !isStock && lastClose != null && looksStable(lastClose, recent),
         returns: r,
       });
     }
     return out;
-  }, [history]);
+  }, [history, rows]);
 
   const simPositions: SimPosition[] = positions.flatMap((p) => {
     const price = priceOf(p.assetId);
     const r = rows.get(p.assetId);
     if (price == null || !r) return [];
     const s = stats.get(p.assetId);
-    return [{ assetId: p.assetId, symbol: r.symbol, quantity: p.quantity, price, beta: s?.beta ?? null, stable: s?.stable }];
+    const assetClass = assetClassOf(p.assetId) === "stock" ? "stock" : "crypto";
+    const beta = assetClass === "stock" ? (s?.beta ?? r.beta ?? null) : (s?.beta ?? null);
+    return [{ assetId: p.assetId, symbol: r.symbol, quantity: p.quantity, price, beta, stable: s?.stable, assetClass }];
   });
 
   const shocks: Shock[] = [];
   if (controls.btc) shocks.push({ assetId: BTC_ID, ...controls.btc });
   if (controls.all != null) shocks.push({ assetId: "*", kind: "pct", value: controls.all });
+  if (controls.spx != null) shocks.push({ assetId: SPX_ID, kind: "pct", value: controls.spx });
   for (const [id, pct] of Object.entries(controls.overrides)) shocks.push({ assetId: id, kind: "pct", value: pct });
   const result = runScenario(simPositions, { shocks, followBtc: controls.follow });
 
@@ -189,23 +203,30 @@ export function Simulator({
     const values = new Map(simPositions.map((p) => [p.assetId, p.quantity * p.price]));
     const returns = new Map([...stats].map(([id, s]) => [id, s.returns]));
     const total = [...values.values()].reduce((a, b) => a + b, 0);
-    let beta = 0;
-    let betaKnown = 0;
-    for (const p of simPositions) {
-      const b = stats.get(p.assetId)?.beta;
-      if (b == null) continue;
-      beta += (p.quantity * p.price * b) / total;
-      betaKnown += (p.quantity * p.price) / total;
-    }
+    // Beta of the coins against Bitcoin and of the stocks against the S&P 500, each over its own part.
+    const groupBeta = (cls: "crypto" | "stock") => {
+      const group = simPositions.filter((p) => (p.assetClass ?? "crypto") === cls);
+      const sub = group.reduce((a, p) => a + p.quantity * p.price, 0);
+      let beta = 0;
+      let known = 0;
+      for (const p of group) {
+        const b = p.beta;
+        if (b == null) continue;
+        beta += (p.quantity * p.price * b) / sub;
+        known += (p.quantity * p.price) / sub;
+      }
+      return sub > 0 && known > 0.5 ? { beta: beta / known, share: sub / total } : null;
+    };
     const largest = [...simPositions].sort((a, b) => b.quantity * b.price - a.quantity * a.price)[0];
     return {
       hist: total > 0 ? historicalRisk(values, history.days.slice(1), returns) : null,
-      beta: betaKnown > 0.5 ? beta / betaKnown : null,
+      beta: total > 0 ? groupBeta("crypto") : null,
+      spxBeta: total > 0 ? groupBeta("stock") : null,
       largest: largest && total > 0 ? { symbol: largest.symbol, share: (largest.quantity * largest.price) / total } : null,
     };
     // simPositions is rebuilt every render; its inputs are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history, stats, JSON.stringify(simPositions.map((p) => [p.assetId, p.quantity, Math.round(p.price)]))]);
+  }, [history, stats, JSON.stringify(simPositions.map((p) => [p.assetId, p.quantity, Math.round(p.price), p.beta]))]);
 
   const choose = (s: Scenario) => {
     setPresetId(s.id);
@@ -234,7 +255,7 @@ export function Simulator({
         )}
         {positions.length === 0 && loaded && (
           <p>
-            Add the coins you hold, or{" "}
+            Add the coins and stocks you hold, or{" "}
             <button type="button" className="btn link" onClick={() => setPositions(EXAMPLE)}>
               try an example portfolio
             </button>
@@ -269,7 +290,8 @@ export function Simulator({
           })}
         </ul>
         <SearchBox
-          placeholder="Add a coin"
+          placeholder="Add a coin or stock"
+          classes={["crypto", "stock"]}
           onPick={(c) => {
             if (!rows.has(c.id)) setExtra((xs) => [...xs, c]);
             setPositions((ps) => (ps.some((p) => p.assetId === c.id) ? ps : [...ps, { assetId: c.id, quantity: 1 }]));
@@ -322,6 +344,16 @@ export function Simulator({
               </span>
             </label>
             <label>
+              S&amp;P 500 moves %
+              <input
+                key={`spx-${presetId}`}
+                inputMode="decimal"
+                defaultValue={controls.spx ?? ""}
+                placeholder="e.g. -20"
+                onChange={(e) => edit({ spx: parse(e.target.value) })}
+              />
+            </label>
+            <label>
               Every other coin moves %
               <input
                 key={`all-${presetId}`}
@@ -334,7 +366,7 @@ export function Simulator({
           </div>
           <label className="check">
             <input type="checkbox" checked={controls.follow} onChange={(e) => edit({ follow: e.target.checked })} />
-            Coins without their own move follow Bitcoin (by their beta)
+            Coins without their own move follow Bitcoin (by their beta). Stocks always follow the S&amp;P 500.
           </label>
         </details>
       </section>
@@ -342,7 +374,7 @@ export function Simulator({
       <section className="panel result">
         <h2>3. What happens</h2>
         {simPositions.length === 0 ? (
-          <p className="muted">Add a coin above to see the result.</p>
+          <p className="muted">Add a coin or stock above to see the result.</p>
         ) : (
           <>
             <p className="headline">
@@ -355,7 +387,7 @@ export function Simulator({
               <table className="market">
                 <thead>
                   <tr>
-                    <th>Coin</th>
+                    <th>Asset</th>
                     <th className="num hide-sm">Price now</th>
                     <th className="num">Move</th>
                     <th className="num">New price</th>
@@ -370,6 +402,12 @@ export function Simulator({
                         {stats.get(r.assetId)?.stable && <span className="muted small"> · stablecoin</span>}
                         {r.driver === "btc" && (
                           <span className="muted small hide-sm"> · follows BTC × {(stats.get(r.assetId)?.beta ?? 1).toFixed(2)}</span>
+                        )}
+                        {r.driver === "spx" && (
+                          <span className="muted small hide-sm">
+                            {" "}
+                            · follows S&amp;P 500 × {(simPositions.find((p) => p.assetId === r.assetId)?.beta ?? 1).toFixed(2)}
+                          </span>
                         )}
                       </td>
                       <td className="num hide-sm">{formatUsd(r.price)}</td>
@@ -402,7 +440,7 @@ export function Simulator({
                 </tbody>
               </table>
             </div>
-            <p className="muted small">Type a % in the Move column to set any coin yourself.</p>
+            <p className="muted small">Type a % in the Move column to set any coin or stock yourself.</p>
           </>
         )}
       </section>
@@ -414,22 +452,36 @@ export function Simulator({
             <p className="muted">Loading price history…</p>
           ) : (
             <dl className="stats risk">
-              <div>
-                <dt>Moves with Bitcoin (beta)</dt>
-                <dd>
-                  {risk?.beta != null ? (
-                    <>
-                      {risk.beta.toFixed(2)}
-                      <span className="muted small">
-                        {" "}
-                        · a 10% Bitcoin move has meant about {Math.abs(risk.beta * 10).toFixed(0)}% for these holdings
-                      </span>
-                    </>
-                  ) : (
-                    "Not enough history yet"
-                  )}
-                </dd>
-              </div>
+              {(risk?.beta || !risk?.spxBeta) && (
+                <div>
+                  <dt>Coins: moves with Bitcoin (beta)</dt>
+                  <dd>
+                    {risk?.beta != null ? (
+                      <>
+                        {risk.beta.beta.toFixed(2)}
+                        <span className="muted small">
+                          {" "}
+                          · a 10% Bitcoin move has meant about {Math.abs(risk.beta.beta * 10).toFixed(0)}% for your coins
+                        </span>
+                      </>
+                    ) : (
+                      "Not enough history yet"
+                    )}
+                  </dd>
+                </div>
+              )}
+              {risk?.spxBeta && (
+                <div>
+                  <dt>Stocks: moves with the S&amp;P 500 (beta)</dt>
+                  <dd>
+                    {risk.spxBeta.beta.toFixed(2)}
+                    <span className="muted small">
+                      {" "}
+                      · a 10% market move has meant about {Math.abs(risk.spxBeta.beta * 10).toFixed(0)}% for your stocks
+                    </span>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>A bad day (1 day in 20)</dt>
                 <dd>
@@ -466,7 +518,7 @@ export function Simulator({
                     <>
                       {risk.largest.symbol} {(risk.largest.share * 100).toFixed(0)}%
                       {risk.largest.share > 0.6 && simPositions.length > 1 && (
-                        <span className="muted small"> · most of the value rides on one coin</span>
+                        <span className="muted small"> · most of the value rides on one holding</span>
                       )}
                     </>
                   ) : (
@@ -491,5 +543,5 @@ function signedUsd(v: number): string {
 }
 
 function blank(): Controls {
-  return { btc: null, all: null, follow: true, overrides: {} };
+  return { btc: null, all: null, spx: null, follow: true, overrides: {} };
 }
