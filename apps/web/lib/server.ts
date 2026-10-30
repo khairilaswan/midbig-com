@@ -36,6 +36,11 @@ export async function cached<T>(key: string, ttlMs: number, load: () => Promise<
   return value;
 }
 
+/** Drops cached values whose key starts with this prefix, after a change that must show at once. */
+export function uncache(prefix: string): void {
+  for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k);
+}
+
 export async function livePrices(ids: string[]): Promise<Map<string, LivePrice>> {
   const out = new Map<string, LivePrice>();
   if (ids.length === 0) return out;

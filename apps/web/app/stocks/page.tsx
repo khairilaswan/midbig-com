@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MarketTable, MoverList } from "@/components/market";
 import { getMarketPage, getMovers, PAGE_SIZE } from "@/lib/server";
+import { classEnabled } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ function parsePage(raw: string | undefined): number {
 
 export default async function StocksPage({ searchParams }: Props) {
   const page = parsePage((await searchParams).page);
-  if (Number.isNaN(page)) notFound();
+  if (Number.isNaN(page) || !(await classEnabled("stock"))) notFound();
   const [{ rows, total }, movers] = await Promise.all([
     getMarketPage(page, "stock"),
     page === 1 ? getMovers(5, "stock") : null,

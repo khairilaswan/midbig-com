@@ -99,6 +99,9 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # Optional: lets admins add AI bots (each reply is a paid Claude API call).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BOT_AI_MODEL: ${BOT_AI_MODEL:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     depends_on:

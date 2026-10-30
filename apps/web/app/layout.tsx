@@ -5,6 +5,7 @@ import { LiveConnection } from "@/components/live";
 import { CookieBanner } from "@/components/privacy";
 import { RegisterServiceWorker } from "@/components/register-sw";
 import { SearchBox } from "@/components/search-box";
+import { categories } from "@/lib/settings";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -21,6 +22,9 @@ export const metadata: Metadata = {
   openGraph: { siteName: SITE_NAME, type: "website" },
 };
 
+// The header follows the admin's category switches, so every page renders per request.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -30,7 +34,8 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const on = await categories();
   return (
     <html lang="en-US">
       <body>
@@ -42,15 +47,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               mid<span>big</span>
             </Link>
             <nav className="nav">
-              <Link href="/">Coins</Link>
-              <Link href="/stocks">Stocks</Link>
-              <Link href="/forex">Forex</Link>
-              <Link href="/gainers-losers">Movers</Link>
+              <Link href="/forum">Communities</Link>
+              {on.crypto && <Link href="/">Coins</Link>}
+              {on.stock && <Link href="/stocks">Stocks</Link>}
+              {on.forex && <Link href="/forex">Forex</Link>}
+              {on.crypto && <Link href="/gainers-losers">Movers</Link>}
               <Link href="/watchlist">Watchlist</Link>
               <Link href="/portfolio">Portfolio</Link>
               <Link href="/what-if">What if</Link>
               <Link href="/chat">Chat</Link>
-              <Link href="/forum">Forum</Link>
             </nav>
             <SearchBox />
             <AccountMenu />

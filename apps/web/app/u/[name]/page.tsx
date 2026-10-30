@@ -41,8 +41,8 @@ export default async function ProfilePage({ params }: Props) {
           </dd>
         </div>
         <div>
-          <dt>Helpful votes received</dt>
-          <dd>{profile.helpfulReceived}</dd>
+          <dt>Net votes received</dt>
+          <dd>{profile.scoreReceived}</dd>
         </div>
         <div>
           <dt>Topics · replies</dt>
@@ -76,7 +76,7 @@ export default async function ProfilePage({ params }: Props) {
                 </p>
                 <p className="muted small">
                   {ago(p.createdAt)}
-                  {p.helpful > 0 ? ` · 👍 ${p.helpful}` : ""}
+                  {` · ${p.score >= 0 ? "▲" : "▼"} ${p.score}`}
                 </p>
               </li>
             ))}

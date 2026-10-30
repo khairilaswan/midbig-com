@@ -1,32 +1,41 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { isForumCategory } from "@midbig/shared";
 import { TopicForm } from "@/components/forum";
 import { turnstile } from "@/lib/auth";
+import { communityForAsset, communityNames, getCommunityById } from "@/lib/communities";
 import { forumViewer } from "@/lib/forum";
-import { getAsset } from "@/lib/server";
 
-export const metadata: Metadata = { title: "Start a topic", robots: { index: false } };
+export const metadata: Metadata = { title: "New post", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ category?: string; asset?: string }> };
+type Props = { searchParams: Promise<{ community?: string; asset?: string }> };
 
 export default async function NewTopicPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const [{ me }, asset] = await Promise.all([forumViewer(), sp.asset ? getAsset(sp.asset) : null]);
-  const category = sp.category && isForumCategory(sp.category) ? sp.category : null;
+  const [{ me }, choices, picked] = await Promise.all([
+    forumViewer(),
+    communityNames(),
+    sp.community ? getCommunityById(sp.community) : sp.asset ? communityForAsset(sp.asset) : null,
+  ]);
+  const community = picked && picked.status === "active" ? picked : null;
 
   return (
     <div className="narrow">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link href="/forum">Forum</Link> <span aria-hidden>›</span> <span>New topic</span>
+        <Link href="/forum">Communities</Link> <span aria-hidden>›</span>{" "}
+        {community && (
+          <>
+            <Link href={community.path}>{community.label}</Link> <span aria-hidden>›</span>{" "}
+          </>
+        )}
+        <span>New post</span>
       </nav>
-      <h1 className="page-title">Start a topic</h1>
+      <h1 className="page-title">New post</h1>
       <TopicForm
         me={me}
         captchaSiteKey={turnstile?.siteKey ?? null}
-        category={category}
-        asset={asset ? { id: asset.id, name: asset.name, symbol: asset.symbol } : null}
+        community={community && { id: community.id, label: community.label, title: community.title }}
+        choices={choices}
       />
     </div>
   );

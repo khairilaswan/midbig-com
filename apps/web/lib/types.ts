@@ -1,4 +1,4 @@
-import type { AssetClass, ChatBadge, ChatMessage, FilterReason, ForumCategory, LivePrice, ReportReason } from "@midbig/shared";
+import type { AssetClass, ChatBadge, ChatMessage, FilterReason, LivePrice, ReportReason, Stance, VoteValue } from "@midbig/shared";
 
 /** One asset as the market tables need it. Serialisable, so it can go to client components. */
 export interface AssetRow {
@@ -68,20 +68,25 @@ export interface ForumAuthor {
   name: string;
   badge: ChatBadge;
   reputation: number;
+  verified: boolean;
 }
 
 export interface TopicSummary {
   id: string;
   title: string;
   path: string;
-  category: ForumCategory;
+  community: { id: string; label: string; path: string; title: string };
   assetId: string | null;
   assetSymbol: string | null;
   author: ForumAuthor;
-  /** Visible replies. */
+  /** Visible comments. */
   replies: number;
-  /** Helpful votes on the opening post. */
-  helpful: number;
+  /** Net votes on the opening post. */
+  score: number;
+  /** The viewer's vote on the opening post. */
+  myVote: VoteValue;
+  firstPostId: string | null;
+  stance: Stance | null;
   lastPostAt: number;
   createdAt: number;
   pinned: boolean;
@@ -92,13 +97,16 @@ export interface TopicSummary {
 export interface ForumPost {
   id: string;
   topicId: string;
+  /** The comment this answers; null for the opening post and top-level comments. */
+  parentId: string | null;
+  depth: number;
   isFirst: boolean;
   author: ForumAuthor;
   body: string;
   createdAt: number;
   editedAt: number | null;
-  helpful: number;
-  votedByMe: boolean;
+  score: number;
+  myVote: VoteValue;
   status: "visible" | "held" | "removed";
   mine: boolean;
   /** The author's own post, still in its first hour. */
@@ -111,13 +119,15 @@ export interface Profile extends ForumAuthor {
   trusted: boolean;
   topics: number;
   replies: number;
-  helpfulReceived: number;
+  /** Net votes on the member's visible posts. */
+  scoreReceived: number;
   recent: (ForumPost & { topicTitle: string; topicPath: string })[];
 }
 
 export interface ForumQueueItem extends ForumPost {
   topicTitle: string;
   topicPath: string;
+  communityLabel: string;
   heldBy: "filter" | "reports" | null;
   flags: FilterReason[];
   reports: { reason: ReportReason; n: number }[];
@@ -128,6 +138,12 @@ export interface ForumQueueItem extends ForumPost {
 /** The signed-in person, for the forum's buttons and forms. */
 export interface ForumMe {
   id: string;
+  /** Can moderate here: site staff, or this community's moderators (both with two-factor login). */
   canModerate: boolean;
+  /** Site staff with two-factor login: can also ban. */
+  isSiteMod: boolean;
   block: PostBlock | null;
+  /** Why this account can't upvote or downvote yet. */
+  voteBlock: string | null;
+  downBlock: string | null;
 }

@@ -11,7 +11,9 @@ services:
       SITE_URL: http://localhost:8000
 
   caddy:
+    # IPv4 only: on some Windows PCs Docker's IPv6 relay for localhost hangs,
+    # and binding 127.0.0.1 makes browsers use the working IPv4 address.
     ports: !override
-      - "8000:80"
+      - "127.0.0.1:8000:80"
     environment:
       SITE_ADDRESS: ":80"
