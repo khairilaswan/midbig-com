@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { Turnstile } from "@/components/turnstile";
 
 /** Only same-site paths, so a crafted link can't send people elsewhere after login. */
 function safeNext(raw: string | null): string {
@@ -13,6 +14,11 @@ function safeNext(raw: string | null): string {
 function errorText(err: { message?: string; code?: string } | null | undefined): string {
   if (!err) return "Something went wrong. Please try again.";
   if (err.code === "INVALID_EMAIL_OR_PASSWORD") return "That email and password don't match.";
+  if (err.code === "INVALID_CODE" || err.code === "INVALID_TWO_FACTOR_CODE") return "That code didn't match. Try the newest one.";
+  if (err.code === "INVALID_BACKUP_CODE") return "That backup code isn't valid or was already used.";
+  if (err.code?.startsWith("CAPTCHA") || err.code === "MISSING_RESPONSE" || err.code === "VERIFICATION_FAILED") {
+    return "The human check didn't pass. Please try again.";
+  }
   if (err.code === "USER_ALREADY_EXISTS" || err.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") {
     return "There's already an account with that email. Try logging in.";
   }
@@ -39,6 +45,18 @@ export function LoginForm({ google }: { google: boolean }) {
   const next = safeNext(useSearchParams().get("next"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [needCode, setNeedCode] = useState(false);
+
+  if (needCode) {
+    return (
+      <TwoFactorStep
+        onDone={() => {
+          router.push(next);
+          router.refresh();
+        }}
+      />
+    );
+  }
 
   return (
     <form
@@ -48,13 +66,14 @@ export function LoginForm({ google }: { google: boolean }) {
         const f = new FormData(e.currentTarget);
         setBusy(true);
         setError("");
-        const { error } = await authClient.signIn.email({
+        const { data, error } = await authClient.signIn.email({
           email: String(f.get("email")),
           password: String(f.get("password")),
           rememberMe: true,
         });
         setBusy(false);
         if (error) return setError(errorText(error));
+        if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) return setNeedCode(true);
         router.push(next);
         router.refresh();
       }}
@@ -80,11 +99,65 @@ export function LoginForm({ google }: { google: boolean }) {
   );
 }
 
-export function SignupForm({ google }: { google: boolean }) {
+/** Second login step for accounts with two-factor login on. */
+function TwoFactorStep({ onDone }: { onDone: () => void }) {
+  const [backup, setBackup] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="form auth"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        const code = String(f.get("code")).trim().replace(backup ? /\s/g : /\D/g, "");
+        const trustDevice = f.get("trust") === "on";
+        setBusy(true);
+        setError("");
+        const { error } = backup
+          ? await authClient.twoFactor.verifyBackupCode({ code, trustDevice })
+          : await authClient.twoFactor.verifyTotp({ code, trustDevice });
+        setBusy(false);
+        if (error) return setError(errorText(error));
+        onDone();
+      }}
+    >
+      <p>{backup ? "Type one of your backup codes." : "Open your authenticator app and type the 6-digit code for midbig."}</p>
+      <label>
+        {backup ? "Backup code" : "Code"}
+        <input
+          key={backup ? "backup" : "totp"}
+          name="code"
+          autoComplete="one-time-code"
+          inputMode={backup ? "text" : "numeric"}
+          autoFocus
+          required
+        />
+      </label>
+      <label className="check">
+        <input type="checkbox" name="trust" /> Don&rsquo;t ask again on this device for 30 days
+      </label>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button className="btn wide" disabled={busy}>
+        {busy ? "Checking…" : "Log in"}
+      </button>
+      <p className="muted small">
+        <button type="button" className="btn link small" onClick={() => setBackup((b) => !b)}>
+          {backup ? "Use the app code instead" : "Lost your phone? Use a backup code"}
+        </button>
+      </p>
+    </form>
+  );
+}
+
+export function SignupForm({ google, captchaSiteKey }: { google: boolean; captchaSiteKey: string | null }) {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  // Each token works once, so a failed attempt needs a fresh check.
+  const [captchaRound, setCaptchaRound] = useState(0);
 
   return (
     <form
@@ -95,13 +168,20 @@ export function SignupForm({ google }: { google: boolean }) {
         const email = String(f.get("email")).trim();
         setBusy(true);
         setError("");
-        const { error } = await authClient.signUp.email({
-          name: String(f.get("name")).trim() || email.split("@")[0]!,
-          email,
-          password: String(f.get("password")),
-        });
+        const { error } = await authClient.signUp.email(
+          {
+            name: String(f.get("name")).trim() || email.split("@")[0]!,
+            email,
+            password: String(f.get("password")),
+          },
+          captcha ? { headers: { "x-captcha-response": captcha } } : undefined,
+        );
         setBusy(false);
-        if (error) return setError(errorText(error));
+        if (error) {
+          setCaptcha(null);
+          setCaptchaRound((n) => n + 1);
+          return setError(errorText(error));
+        }
         router.push(next);
         router.refresh();
       }}
@@ -119,10 +199,16 @@ export function SignupForm({ google }: { google: boolean }) {
         Password <span className="muted">(8 characters or more)</span>
         <input name="password" type="password" autoComplete="new-password" minLength={8} maxLength={128} required />
       </label>
+      {captchaSiteKey && <Turnstile key={captchaRound} siteKey={captchaSiteKey} onToken={setCaptcha} />}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="btn wide" disabled={busy}>
+      <button className="btn wide" disabled={busy || (captchaSiteKey != null && !captcha)}>
         {busy ? "Creating your account…" : "Create account"}
       </button>
+      <p className="muted small">
+        By creating an account you agree to the <Link href="/terms">Terms</Link> and{" "}
+        <Link href="/rules">Community rules</Link>, and confirm you&rsquo;re 18 or older. See how we handle your data
+        in the <Link href="/privacy">Privacy policy</Link>.
+      </p>
       <p className="muted small">
         Already have an account? <Link href={`/login?next=${encodeURIComponent(next)}`}>Log in</Link>
       </p>

@@ -3,6 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { ChatNameForm } from "@/components/chat";
+
+export function ChatNameSetting({ current }: { current: string | null }) {
+  const router = useRouter();
+  if (!current) {
+    return (
+      <>
+        <p className="muted">You&rsquo;ll pick a name the first time you chat. Or pick one now:</p>
+        <ChatNameForm onSaved={() => router.refresh()} />
+      </>
+    );
+  }
+  return <ChatNameForm current={current} onSaved={() => router.refresh()} />;
+}
 
 export function SignOutButton() {
   const router = useRouter();
@@ -83,7 +97,7 @@ export function DeleteAccountForm({ hasPassword }: { hasPassword: boolean }) {
       }}
     >
       <p>
-        This deletes your account, watchlist, portfolio and alerts for good. It can&rsquo;t be undone.
+        This deletes your account, watchlist, portfolio, alerts and chat messages for good. It can&rsquo;t be undone.
       </p>
       {hasPassword && (
         <label>

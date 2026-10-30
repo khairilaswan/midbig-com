@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { isFresh, type LivePrice, type ServerMessage } from "@midbig/shared";
+import { isFresh, type ChatEvent, type LivePrice, type ServerMessage } from "@midbig/shared";
+
+/** What a chat room component hears: new and removed messages, head counts, and reconnects. */
+export type RoomEvent = ChatEvent | { type: "presence"; room: string; n: number } | { type: "reconnected" };
 
 /**
  * One WebSocket per tab to the price service. Components ask for the ids they
  * show; the store subscribes to exactly those and re-renders only the
- * components whose price changed.
+ * components whose price changed. Chat rooms ride the same connection.
  */
 class LiveStore {
   private url: string | null = null;
@@ -16,6 +19,8 @@ class LiveStore {
   private refCount = new Map<string, number>();
   private pending = new Set<string>();
   private flushQueued = false;
+  private rooms = new Map<string, Set<(ev: RoomEvent) => void>>();
+  private opened = false;
   private backoff = 1000;
   /** Server clock minus local clock, so freshness checks survive a wrong device clock. */
   offset = 0;
@@ -56,6 +61,22 @@ class LiveStore {
     };
   }
 
+  /** Follows a chat room; the callback gets its events until the returned function is called. */
+  joinRoom(room: string, cb: (ev: RoomEvent) => void): () => void {
+    let set = this.rooms.get(room);
+    if (!set) {
+      this.rooms.set(room, (set = new Set()));
+      this.send({ op: "join", rooms: [room] });
+    }
+    set.add(cb);
+    return () => {
+      set.delete(cb);
+      if (set.size > 0) return;
+      this.rooms.delete(room);
+      this.send({ op: "leave", rooms: [room] });
+    };
+  }
+
   private queueSub(id: string): void {
     this.pending.add(id);
     if (this.flushQueued) return;
@@ -80,12 +101,20 @@ class LiveStore {
       this.backoff = 1000;
       this.pending.clear();
       if (this.refCount.size > 0) this.send({ op: "sub", ids: [...this.refCount.keys()] });
+      if (this.rooms.size > 0) this.send({ op: "join", rooms: [...this.rooms.keys()] });
+      // Messages sent while the connection was down are fetched by each room.
+      if (this.opened) this.rooms.forEach((set) => set.forEach((cb) => cb({ type: "reconnected" })));
+      this.opened = true;
     };
     ws.onmessage = (ev) => {
       let msg: ServerMessage;
       try {
         msg = JSON.parse(ev.data);
       } catch {
+        return;
+      }
+      if (msg.type === "chat" || msg.type === "chat-remove" || msg.type === "presence") {
+        this.rooms.get(msg.room)?.forEach((cb) => cb(msg));
         return;
       }
       if (msg.type !== "ticks") return;

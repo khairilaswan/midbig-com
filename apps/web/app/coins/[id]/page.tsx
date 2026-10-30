@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { formatUsd } from "@midbig/shared";
+import { coinRoom, formatUsd } from "@midbig/shared";
+import { ChatRoom } from "@/components/chat";
 import { CoinHeader } from "@/components/coin-header";
 import { PriceChart } from "@/components/price-chart";
 import { WatchButton } from "@/components/watch-button";
@@ -47,6 +48,7 @@ export default async function CoinPage({ params }: Props) {
         </Link>
       </div>
       <PriceChart id={asset.id} initialLive={asset.live} />
+      <ChatRoom room={coinRoom(asset.id)} title={`${asset.symbol} chat`} />
       <section className="about">
         <h2>About {asset.name} prices</h2>
         <p>

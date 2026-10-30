@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { captcha, twoFactor } from "better-auth/plugins";
 import { sendEmail } from "@midbig/shared";
 import { pool } from "./server";
 import { SITE_NAME, SITE_URL } from "./site";
@@ -35,6 +36,16 @@ const google =
     ? { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }
     : undefined;
 export const googleEnabled = Boolean(google);
+
+/**
+ * Cloudflare Turnstile (free) on sign-up and on a member's first chat
+ * message. Both keys come from the Cloudflare dashboard; without them the
+ * check is skipped, which is fine on a home computer.
+ */
+export const turnstile =
+  process.env.TURNSTILE_SITE_KEY && process.env.TURNSTILE_SECRET_KEY
+    ? { siteKey: process.env.TURNSTILE_SITE_KEY, secretKey: process.env.TURNSTILE_SECRET_KEY }
+    : null;
 
 const options = {
   appName: SITE_NAME,
@@ -69,7 +80,15 @@ const options = {
   // "missing tables" result if the site starts before the price service has
   // applied the migrations, and fail every login until a restart.
   advanced: { database: { validateSchema: false } },
-  plugins: [nextCookies()],
+  plugins: [
+    // Authenticator app codes, with backup codes. Accounts that only use
+    // Google have no password, so they turn it on without one.
+    twoFactor({ issuer: SITE_NAME, allowPasswordless: true }),
+    ...(turnstile
+      ? [captcha({ provider: "cloudflare-turnstile", secretKey: turnstile.secretKey, endpoints: ["/sign-up/email"] })]
+      : []),
+    nextCookies(),
+  ],
 } satisfies BetterAuthOptions;
 
 export const auth = betterAuth(options);

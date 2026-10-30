@@ -15,7 +15,7 @@ export function pool(): pg.Pool {
   return g.__pool;
 }
 
-function redis(): Redis {
+export function redis(): Redis {
   g.__redis ??= new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
     maxRetriesPerRequest: 1,
     connectTimeout: 2000,
