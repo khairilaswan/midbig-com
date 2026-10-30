@@ -118,3 +118,5 @@ export * from "./chat.js";
 export * from "./markets.js";
 export * from "./forum.js";
 export * from "./stress.js";
+export * from "./community.js";
+export * from "./bots.js";
