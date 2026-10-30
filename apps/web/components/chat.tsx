@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { CHAT_MAX_LENGTH, CHAT_NAME_RULE, REPORT_REASONS, type ChatMessage, type ReportReason } from "@midbig/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CHAT_MAX_LENGTH, CHAT_NAME_RULE, profilePath, REPORT_REASONS, type ChatMessage, type ReportReason } from "@midbig/shared";
 import { deleteMyMessage, modBan, modRemove, mute, report, saveChatName } from "@/app/chat-actions";
 import { liveStore, type RoomEvent } from "@/components/live";
+import { Body } from "@/components/post-body";
 import { Turnstile } from "@/components/turnstile";
 import type { ChatState } from "@/lib/types";
 
@@ -25,24 +26,6 @@ async function fetchRoom(room: string, extra = ""): Promise<ChatState> {
 
 function clock(at: number): string {
   return new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
-
-/** Message text with http(s) links made clickable (never followed by search engines). */
-function Body({ text }: { text: string }) {
-  const parts = text.split(/(https?:\/\/[^\s<>"]+)/g);
-  return (
-    <>
-      {parts.map((p, i) =>
-        i % 2 === 1 ? (
-          <a key={i} href={p} target="_blank" rel="nofollow ugc noopener noreferrer">
-            {p}
-          </a>
-        ) : (
-          <Fragment key={i}>{p}</Fragment>
-        ),
-      )}
-    </>
-  );
 }
 
 export function ChatRoom({ room, title, tall = false }: { room: string; title: string; tall?: boolean }) {
@@ -211,7 +194,9 @@ function ChatLine({
   return (
     <li className={`chat-msg${m.held ? " held" : ""}${m.badge ? " staff" : ""}`}>
       <div className="chat-meta">
-        <strong className="chat-name">{m.name}</strong>
+        <Link href={profilePath(m.name)} className="chat-name">
+          <strong>{m.name}</strong>
+        </Link>
         {m.badge && <span className="badge staff-badge">{m.badge === "admin" ? "Admin" : "Mod"}</span>}
         <time className="muted small" dateTime={new Date(m.at).toISOString()} title={new Date(m.at).toLocaleString("en-US")}>
           {clock(m.at)}

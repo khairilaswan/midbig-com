@@ -4,7 +4,7 @@ import { CONTACT_EMAIL, LEGAL_UPDATED } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms of service",
-  description: "The terms for using midbig.com, its market data, portfolio tools and chat.",
+  description: "The terms for using midbig.com, its market data, portfolio tools, chat and forum.",
   alternates: { canonical: "/terms" },
 };
 
@@ -23,7 +23,7 @@ export default function TermsPage() {
       <h2>1. Information only, not advice</h2>
       <p>
         midbig shows market prices, charts, portfolio figures and what-if scenarios for information only. Nothing on
-        midbig, including anything posted in chat, is financial, investment, tax or legal advice, or a recommendation
+        midbig, including anything posted in chat or the forum, is financial, investment, tax or legal advice, or a recommendation
         to buy or sell anything. We are not a broker, exchange, or investment adviser, and we don&rsquo;t hold anyone&rsquo;s
         money or crypto. Crypto is volatile and you can lose everything you put in. Make your own decisions, and talk
         to a licensed professional if you need advice.
@@ -49,7 +49,7 @@ export default function TermsPage() {
 
       <h2>4. What you post</h2>
       <p>
-        You own what you post in chat. By posting, you give us a worldwide, non-exclusive, royalty-free licence to
+        You own what you post in chat and the forum. By posting, you give us a worldwide, non-exclusive, royalty-free licence to
         store, display and share it on midbig so the service works. You promise you have the right to post it and
         that it follows the <Link href="/rules">Community rules</Link>.
       </p>

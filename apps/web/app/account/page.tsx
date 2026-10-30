@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { profilePath, repLevel } from "@midbig/shared";
 import { ChangePasswordForm, ChatNameSetting, DeleteAccountForm, SignOutButton } from "@/components/account-settings";
+import { BioSetting } from "@/components/forum";
 import { PushToggle } from "@/components/push-toggle";
 import { TwoFactorSettings } from "@/components/two-factor";
 import { requireSession } from "@/lib/auth";
@@ -13,10 +15,11 @@ export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const { user } = await requireSession("/account");
-  const [accounts, keys, viewer] = await Promise.all([
+  const [accounts, keys, viewer, bio] = await Promise.all([
     pool().query<{ providerId: string }>(`SELECT "providerId" FROM "account" WHERE "userId" = $1`, [user.id]),
     vapidKeys().catch(() => null),
     getViewer(user.id),
+    pool().query<{ bio: string | null }>(`SELECT bio FROM "user" WHERE id = $1`, [user.id]),
   ]);
   const hasPassword = accounts.rows.some((a) => a.providerId === "credential");
 
@@ -33,9 +36,18 @@ export default async function AccountPage() {
         </p>
       )}
 
-      <section className="panel">
-        <h2>Chat name</h2>
+      <section className="panel" id="profile">
+        <h2>Public name and profile</h2>
         <ChatNameSetting current={viewer?.chatName ?? null} />
+        {viewer?.chatName && (
+          <>
+            <p className="muted small">
+              Shown in chat and the forum. Reputation {viewer.reputation} ({repLevel(viewer.reputation)}) ·{" "}
+              <Link href={profilePath(viewer.chatName)}>See your profile</Link>
+            </p>
+            <BioSetting current={bio.rows[0]?.bio ?? null} />
+          </>
+        )}
       </section>
 
       <section className="panel">
@@ -65,7 +77,7 @@ export default async function AccountPage() {
       <section className="panel">
         <h2>Your data</h2>
         <p className="muted">
-          Download everything we store about you: your account details, watchlist, portfolio, alerts and chat messages.
+          Download everything we store about you: your account details, watchlist, portfolio, alerts, chat messages and forum posts.
         </p>
         <p className="row-gap">
           <a className="btn secondary" href="/api/account/export" download>

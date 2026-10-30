@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { assetPath, FILTER_REASON_LABELS, parseRoom, REPORT_REASONS, type ChatRole } from "@midbig/shared";
 import { adminSetModerator, modApprove, modBan, modRemove, modUnban } from "@/app/chat-actions";
+import { modForumApprove, modForumRemove } from "@/app/forum-actions";
 import type { ActionResult } from "@/app/actions";
 import type { QueueItem } from "@/lib/chat";
+import type { ForumQueueItem } from "@/lib/types";
 
 function roomLink(room: string) {
   const r = parseRoom(room);
@@ -39,7 +41,7 @@ export function ModQueue({ items }: { items: QueueItem[] }) {
   const held = items.filter((i) => i.status === "held");
   return (
     <section className="panel">
-      <h2>Queue ({items.length})</h2>
+      <h2>Chat queue ({items.length})</h2>
       {error && <p className="form-error">{error}</p>}
       {items.length === 0 && <p className="muted">Nothing waiting. Nice.</p>}
       {held.length > 1 && (
@@ -95,11 +97,73 @@ export function ModQueue({ items }: { items: QueueItem[] }) {
   );
 }
 
+export function ForumQueue({ items }: { items: ForumQueueItem[] }) {
+  const { run, pending, error } = useAction();
+  const held = items.filter((i) => i.status === "held");
+  return (
+    <section className="panel">
+      <h2>Forum queue ({items.length})</h2>
+      {error && <p className="form-error">{error}</p>}
+      {items.length === 0 && <p className="muted">Nothing waiting.</p>}
+      {held.length > 1 && (
+        <p className="row-gap">
+          <button type="button" className="btn secondary small" disabled={pending} onClick={() => run(() => modForumRemove(held.map((i) => i.id)))}>
+            Remove all {held.length} held
+          </button>
+        </p>
+      )}
+      <ol className="mod-queue">
+        {items.map((p) => (
+          <li key={p.id} className="mod-item">
+            <div className="chat-meta small">
+              <strong>{p.author.name}</strong>
+              <span className="muted">
+                joined {ago(p.authorJoined)} ago · {p.authorPosts} posts · rep {p.author.reputation} ·{" "}
+                {p.isFirst ? "new topic" : "reply in"} <Link href={`${p.topicPath}#p${p.id}`}>{p.topicTitle}</Link> ·{" "}
+                {new Date(p.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+              </span>
+            </div>
+            <p className="chat-body">{p.body.length > 1200 ? `${p.body.slice(0, 1200)}…` : p.body}</p>
+            <p className="small">
+              {p.status === "held" ? (
+                <span className="badge">{p.heldBy === "reports" ? "Hidden by reports" : "Held by filter"}</span>
+              ) : (
+                <span className="badge">Visible, reported</span>
+              )}{" "}
+              {p.flags.map((f) => FILTER_REASON_LABELS[f] ?? f).join(", ")}
+              {p.reports.length > 0 && (
+                <span className="muted">
+                  {p.flags.length > 0 ? " · " : ""}
+                  Reports: {p.reports.map((r) => `${REPORT_REASONS[r.reason] ?? r.reason} ×${r.n}`).join(", ")}
+                </span>
+              )}
+            </p>
+            <p className="row-gap">
+              <button type="button" className="btn secondary small" disabled={pending} onClick={() => run(() => modForumApprove([p.id]))}>
+                {p.status === "held" ? "Approve" : "Keep it"}
+              </button>
+              <button type="button" className="btn danger small" disabled={pending} onClick={() => run(() => modForumRemove([p.id]))}>
+                Remove
+              </button>
+              <button type="button" className="btn danger small" disabled={pending} onClick={() => run(() => modBan(p.author.id, 24, p.body.slice(0, 120)))}>
+                Remove + ban 24h
+              </button>
+              <button type="button" className="btn danger small" disabled={pending} onClick={() => run(() => modBan(p.author.id, null, p.body.slice(0, 120)))}>
+                Ban for good
+              </button>
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function BanList({ bans }: { bans: { userId: string; name: string; until: number | null; reason: string | null }[] }) {
   const { run, pending, error } = useAction();
   return (
     <section className="panel">
-      <h2>Banned from chat ({bans.length})</h2>
+      <h2>Banned from chat and forum ({bans.length})</h2>
       {error && <p className="form-error">{error}</p>}
       {bans.length === 0 && <p className="muted">Nobody.</p>}
       <ul className="mod-list">

@@ -5,7 +5,8 @@ one small server. Phase 1 of the MVP plan is the price site; Phase 2 adds
 accounts, a watchlist, a portfolio tracker, a what-if simulator, price alerts
 and an installable app; Phase 3 adds live chat with a scam filter and
 moderation, two-factor login and the legal pages needed to launch; Phase 4 adds
-S&P 500 stocks and 30 forex pairs, switched on by a Finnhub API key.
+S&P 500 stocks and 30 forex pairs, switched on by a Finnhub API key; Phase 5
+adds the forum, public profiles with reputation, and historical stress tests.
 
 ## How it works
 
@@ -114,6 +115,35 @@ of the portfolio because a rate isn't a dollar price.
 
 The free Finnhub plan is for personal use. Before showing stock or forex prices to the public, move to a paid plan
 whose licence allows display, then set `FINNHUB_CALLS_PER_MINUTE` and `FINNHUB_WS_SYMBOLS=600` to its limits.
+
+### Forum, reputation and stress tests (Phase 5)
+
+- **Forum** (`/forum`): six categories (`FORUM_CATEGORIES` in `packages/shared/src/forum.ts`), topics that can be
+  linked to a coin, stock or forex pair (shown under its chat), "latest" and "most helpful this month" lists, and
+  pages of 30 replies. Topics are server-rendered, marked up as `DiscussionForumPosting` and listed in the sitemap.
+  Tables are in `db/migrations/005_community.sql`: `forum_topics`, `forum_posts` (the opening post and replies),
+  `forum_votes` and `forum_reports`.
+- **Same protection as chat**: posts, titles and edits go through the chat scam filter (`checkMessage`, with a longer
+  length limit); held posts show only to their author and moderators. The chat waits apply (10 minutes to post,
+  24 hours for links), plus one topic every 2 minutes (10 a day) and one reply every 15 seconds (100 a day). Members
+  can edit a post in its first hour and delete their own posts. Three reports hide a post until a moderator looks.
+  The first post of any kind needs the Turnstile check when it is set up.
+- **Moderation**: `/mod` has a forum queue next to the chat queue. Moderators can remove posts and pin or lock
+  topics from the topic page. A ban covers chat and the forum and removes the last day of both.
+- **Reputation**: 👍 Helpful votes from accounts at least a day old earn the author a point each; each post a
+  moderator removes costs 10. Levels are Newcomer, Member (10), Trusted (50 and a 30-day-old account) and
+  Veteran (250). Trusted members' links to sites off the allow list post without waiting, and their reports count
+  double. It is kept in `user.reputation` and recounted whenever a vote or removal touches someone.
+- **Profiles** (`/u/<name>`): name, staff badge, level, bio (no links), counts and recent posts. Only Trusted
+  members' profiles are open to search engines. Chat names link to profiles.
+- **Historical stress tests** (on `/what-if`): eight past events, from the dot-com bust to FTX and the 2020–21
+  bull run (`HISTORICAL_EVENTS` in `packages/shared/src/stress.ts`), replayed on today's holdings with the same
+  simulator: Bitcoin, Ethereum, Solana and the S&P 500 use the event's peak-to-trough fall; other coins follow
+  Bitcoin by today's beta and stocks follow the S&P 500. The panel also shows the worst peak-to-trough fall today's
+  holdings would have had over the stored year of daily closes.
+
+Not built yet from the plan's Phase 5: prediction leaderboards (need a lawyer's view first), AI summaries and
+read-only exchange sync.
 
 ### The 1-minute freshness rule
 

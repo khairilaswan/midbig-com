@@ -37,6 +37,7 @@ export interface Viewer {
   /** ms since epoch, Infinity for a permanent ban, null when not banned. */
   bannedUntil: number | null;
   isStaff: boolean;
+  reputation: number;
 }
 
 export async function getViewer(userId: string): Promise<Viewer | null> {
@@ -47,10 +48,11 @@ export async function getViewer(userId: string): Promise<Viewer | null> {
     chat_name: string | null;
     createdAt: Date;
     twoFactorEnabled: boolean | null;
+    reputation: number;
     banned: boolean;
     until: Date | null;
   }>(
-    `SELECT u.id, u.email, u.role, u.chat_name, u."createdAt", u."twoFactorEnabled",
+    `SELECT u.id, u.email, u.role, u.chat_name, u."createdAt", u."twoFactorEnabled", u.reputation,
             b.user_id IS NOT NULL AS banned, b.until
      FROM "user" u LEFT JOIN chat_bans b ON b.user_id = u.id WHERE u.id = $1`,
     [userId],
@@ -72,6 +74,7 @@ export async function getViewer(userId: string): Promise<Viewer | null> {
     twoFactor: Boolean(r.twoFactorEnabled),
     bannedUntil: r.banned && until > Date.now() ? until : null,
     isStaff: role !== "user",
+    reputation: r.reputation,
   };
 }
 
@@ -167,7 +170,7 @@ async function publishRemovals(rows: { id: string; room: string }[]): Promise<vo
   await Promise.all([...byRoom].map(([room, ids]) => publish({ type: "chat-remove", room, ids })));
 }
 
-async function verifyTurnstile(token: string, ip: string | null): Promise<boolean> {
+export async function verifyTurnstile(token: string, ip: string | null): Promise<boolean> {
   if (!turnstile) return true;
   const body = new URLSearchParams({ secret: turnstile.secretKey, response: token });
   if (ip) body.set("remoteip", ip);

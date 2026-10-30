@@ -1,4 +1,4 @@
-import type { AssetClass, ChatMessage, LivePrice } from "@midbig/shared";
+import type { AssetClass, ChatBadge, ChatMessage, FilterReason, ForumCategory, LivePrice, ReportReason } from "@midbig/shared";
 
 /** One asset as the market tables need it. Serialisable, so it can go to client components. */
 export interface AssetRow {
@@ -61,4 +61,73 @@ export interface ChatState {
   } | null;
   /** Turnstile site key when the first-message bot check is on. */
   captchaSiteKey: string | null;
+}
+
+export interface ForumAuthor {
+  id: string;
+  name: string;
+  badge: ChatBadge;
+  reputation: number;
+}
+
+export interface TopicSummary {
+  id: string;
+  title: string;
+  path: string;
+  category: ForumCategory;
+  assetId: string | null;
+  assetSymbol: string | null;
+  author: ForumAuthor;
+  /** Visible replies. */
+  replies: number;
+  /** Helpful votes on the opening post. */
+  helpful: number;
+  lastPostAt: number;
+  createdAt: number;
+  pinned: boolean;
+  locked: boolean;
+  status: "visible" | "held" | "removed";
+}
+
+export interface ForumPost {
+  id: string;
+  topicId: string;
+  isFirst: boolean;
+  author: ForumAuthor;
+  body: string;
+  createdAt: number;
+  editedAt: number | null;
+  helpful: number;
+  votedByMe: boolean;
+  status: "visible" | "held" | "removed";
+  mine: boolean;
+  /** The author's own post, still in its first hour. */
+  canEdit: boolean;
+}
+
+export interface Profile extends ForumAuthor {
+  bio: string | null;
+  joined: number;
+  trusted: boolean;
+  topics: number;
+  replies: number;
+  helpfulReceived: number;
+  recent: (ForumPost & { topicTitle: string; topicPath: string })[];
+}
+
+export interface ForumQueueItem extends ForumPost {
+  topicTitle: string;
+  topicPath: string;
+  heldBy: "filter" | "reports" | null;
+  flags: FilterReason[];
+  reports: { reason: ReportReason; n: number }[];
+  authorJoined: number;
+  authorPosts: number;
+}
+
+/** The signed-in person, for the forum's buttons and forms. */
+export interface ForumMe {
+  id: string;
+  canModerate: boolean;
+  block: PostBlock | null;
 }

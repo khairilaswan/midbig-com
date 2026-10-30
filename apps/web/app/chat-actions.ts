@@ -17,6 +17,7 @@ import {
   unbanUser,
   type Viewer,
 } from "@/lib/chat";
+import { removeRecentPosts } from "@/lib/forum";
 import type { ActionResult } from "./actions";
 
 const LOGIN = "Please log in again.";
@@ -87,11 +88,13 @@ export async function modRemove(messageIds: string[]): Promise<ActionResult> {
   });
 }
 
-/** hours null bans for good. */
+/** Bans from chat and the forum; hours null bans for good. */
 export async function modBan(userId: string, hours: number | null, reason: string): Promise<ActionResult> {
   return attempt(async () => {
     if (hours != null && !(Number.isFinite(hours) && hours > 0 && hours <= 24 * 365)) return "Pick a ban length.";
-    const error = await banUser(await moderator(), String(userId), hours, String(reason ?? ""));
+    const mod = await moderator();
+    const error = await banUser(mod, String(userId), hours, String(reason ?? ""));
+    if (!error) await removeRecentPosts(mod, String(userId));
     revalidatePath("/mod");
     return error;
   });

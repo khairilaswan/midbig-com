@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { coinRoom, formatUsd, idFromSlug } from "@midbig/shared";
 import { StockHeader } from "@/components/asset-header";
 import { ChatRoom } from "@/components/chat";
+import { AssetDiscussions } from "@/components/forum-list";
 import { PriceChart } from "@/components/price-chart";
 import { WatchButton } from "@/components/watch-button";
 import { getSession } from "@/lib/auth";
 import { getAsset } from "@/lib/server";
+import { listTopics } from "@/lib/forum";
 import { isWatched } from "@/lib/user-data";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +36,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function StockPage({ params }: Props) {
   const [asset, session] = await Promise.all([load((await params).symbol), getSession()]);
   if (!asset) notFound();
-  const watched = session ? await isWatched(session.user.id, asset.id) : false;
+  const [watched, discussions] = await Promise.all([
+    session ? isWatched(session.user.id, asset.id) : false,
+    listTopics({ assetId: asset.id, limit: 5 }),
+  ]);
 
   return (
     <article className="coin">
@@ -53,6 +58,7 @@ export default async function StockPage({ params }: Props) {
       </div>
       <PriceChart id={asset.id} initialLive={asset.live} />
       <ChatRoom room={coinRoom(asset.id)} title={`${asset.symbol} chat`} />
+      <AssetDiscussions topics={discussions.topics} asset={asset} />
       <section className="about">
         <h2>About {asset.name} stock prices</h2>
         <p>

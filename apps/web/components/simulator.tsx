@@ -9,6 +9,7 @@ import {
   dailyReturns,
   formatPct,
   formatUsd,
+  HISTORICAL_EVENTS,
   historicalRisk,
   looksStable,
   presetScenarios,
@@ -17,6 +18,7 @@ import {
   type Scenario,
   type Shock,
   type SimPosition,
+  worstDrawdown,
 } from "@midbig/shared";
 import type { AssetRow } from "@/lib/types";
 import type { RiskHistory } from "@/lib/user-data";
@@ -64,12 +66,17 @@ function controlsFrom(s: Scenario): Controls {
   const btc = s.shocks.find((x) => x.assetId === BTC_ID);
   const all = s.shocks.find((x) => x.assetId === "*");
   const spx = s.shocks.find((x) => x.assetId === SPX_ID);
+  // Other coins' own moves (a historical event's Ethereum figure) show in the table's Move column.
+  const overrides: Record<string, number> = {};
+  for (const x of s.shocks) {
+    if (x.kind === "pct" && x.assetId !== BTC_ID && x.assetId !== "*" && x.assetId !== SPX_ID) overrides[x.assetId] = x.value;
+  }
   return {
     btc: btc ? { kind: btc.kind, value: btc.value } : null,
     all: all ? all.value : null,
     spx: spx ? spx.value : null,
     follow: s.followBtc,
-    overrides: {},
+    overrides,
   };
 }
 
@@ -228,6 +235,19 @@ export function Simulator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [history, stats, JSON.stringify(simPositions.map((p) => [p.assetId, p.quantity, Math.round(p.price), p.beta]))]);
 
+  const stress = useMemo(
+    () =>
+      HISTORICAL_EVENTS.map((e) => ({ event: e, result: runScenario(simPositions, e) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(simPositions.map((p) => [p.assetId, p.quantity, Math.round(p.price), p.beta, p.stable]))],
+  );
+  const drawdown = useMemo(() => {
+    if (!history) return null;
+    const quantities = new Map(positions.filter((p) => p.quantity > 0).map((p) => [p.assetId, p.quantity]));
+    return worstDrawdown(quantities, history.days, history.closes);
+  }, [history, positions]);
+  const scenario = presetId ? [...presets, ...HISTORICAL_EVENTS].find((s) => s.id === presetId) : null;
+
   const choose = (s: Scenario) => {
     setPresetId(s.id);
     setControls(controlsFrom(s));
@@ -315,7 +335,22 @@ export function Simulator({
             </button>
           ))}
         </div>
-        {presetId && <p className="muted small">{presets.find((s) => s.id === presetId)?.description}</p>}
+        <h3 className="small-head">Or replay a past crash</h3>
+        <div className="presets">
+          {HISTORICAL_EVENTS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`preset ${presetId === s.id ? "on" : ""}`}
+              aria-pressed={presetId === s.id}
+              onClick={() => choose(s)}
+              title={s.description}
+            >
+              {s.label} <span className="muted small">{s.period}</span>
+            </button>
+          ))}
+        </div>
+        {scenario && <p className="muted small">{scenario.description}</p>}
         <details className="custom" open={presetId == null}>
           <summary>Or set your own</summary>
           <div className="form-row">
@@ -446,6 +481,62 @@ export function Simulator({
       </section>
 
       {simPositions.length > 0 && (
+        <section className="panel stress">
+          <h2>Stress test: past crashes on today&rsquo;s holdings</h2>
+          <div className="table-wrap">
+            <table className="market">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th className="num">Your holdings</th>
+                  <th className="num">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stress.map(({ event, result: r }) => (
+                  <tr key={event.id} className={presetId === event.id ? "on" : undefined}>
+                    <td>
+                      <button type="button" className="btn link" onClick={() => choose(event)}>
+                        {event.label}
+                      </button>
+                      <span className="muted small"> · {event.period}</span>
+                    </td>
+                    <td className="num">{formatUsd(r.newValue)}</td>
+                    <td className={`num chg ${r.change >= 0 ? "up" : "down"}`}>
+                      {signedUsd(r.change)}
+                      <div className="small">{formatPct(r.pct)}</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="small">
+            {!history ? (
+              <span className="muted">Loading your worst stretch…</span>
+            ) : drawdown ? (
+              <>
+                Worst stretch in the last {drawdown.days} days: <strong>−{drawdown.pct.toFixed(1)}%</strong>{" "}
+                <span className="muted">
+                  (about −{formatUsd((result.value * drawdown.pct) / 100)} at today&rsquo;s value) from {day(drawdown.peakDay)} to{" "}
+                  {day(drawdown.troughDay)}
+                  {drawdown.recoveredDay ? `, back to the peak by ${day(drawdown.recoveredDay)}` : ", not yet back to that peak"}.
+                </span>
+              </>
+            ) : (
+              <span className="muted">Not enough price history yet for your worst stretch.</span>
+            )}
+          </p>
+          <p className="muted small">
+            Each event uses the size of the fall from peak to bottom in daily closes, rounded. Coins without their own
+            figure follow Bitcoin by today&rsquo;s beta and stocks follow the S&amp;P 500 by theirs, so this shows how
+            today&rsquo;s holdings would fare in a repeat, not what happened to each one. Click an event to see it coin
+            by coin.
+          </p>
+        </section>
+      )}
+
+      {simPositions.length > 0 && (
         <section className="panel">
           <h2>Risk at a glance</h2>
           {!history ? (
@@ -535,6 +626,10 @@ export function Simulator({
       )}
     </div>
   );
+}
+
+function day(d: string): string {
+  return new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
 }
 
 /** +$1,234.00 / −$1,234.00 */

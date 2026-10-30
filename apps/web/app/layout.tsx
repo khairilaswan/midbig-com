@@ -50,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/portfolio">Portfolio</Link>
               <Link href="/what-if">What if</Link>
               <Link href="/chat">Chat</Link>
+              <Link href="/forum">Forum</Link>
             </nav>
             <SearchBox />
             <AccountMenu />

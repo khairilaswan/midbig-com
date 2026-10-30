@@ -22,7 +22,7 @@ cd midbig-com
 ```
 
 To try changes before their pull request is merged, switch to its branch
-(for Phase 4: `git checkout claude/project-thread-4wtey4`), and back with
+(for Phase 5: `git checkout claude/project-thread-3uay73`), and back with
 `git checkout main`.
 
 ## 3. Create the settings file (one time)
@@ -109,6 +109,25 @@ the free plan (three calls per stock, 50 a minute); prices appear as they load.
   ban people, and make friends moderators (they need two-factor login too).
 - To test as a second person, open a private (incognito) window and sign up
   with another email.
+
+## Forum, profiles and stress tests
+
+- **Forum** is in the top menu. Start a topic with **Start a topic**, or from
+  the **Start a topic** button under any coin, stock or forex page's chat, which
+  links the topic to that page.
+- The same waits apply as in chat (10 minutes before posting, 24 hours before
+  links), plus one new topic every 2 minutes and one reply every 15 seconds.
+  Accounts can mark posts **👍 Helpful** after their first day. Your admin
+  account skips the waits.
+- Try a scam reply such as `DM me on telegram for guaranteed returns`. It waits
+  in the **Forum queue** on http://localhost:8000/mod.
+- Click any name to see that member's profile, reputation and recent posts.
+  Add a short bio on your account page under **Public name and profile**.
+- As a moderator, the **⋯** button on a post can remove it, ban its author for
+  24 hours, and pin or lock the topic.
+- **Stress test**: open **What if**, add holdings (or try the example
+  portfolio) and scroll to "Stress test: past crashes on today's holdings".
+  Click an event to see it coin by coin.
 
 ### On your phone
 
