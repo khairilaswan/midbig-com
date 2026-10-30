@@ -57,6 +57,9 @@ services:
       DATABASE_URL: postgres://midbig:${POSTGRES_PASSWORD}@postgres:5432/midbig
       REDIS_URL: redis://redis:6379
       COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      SITE_URL: ${SITE_URL:-https://midbig.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -76,6 +79,11 @@ services:
       DATABASE_URL: postgres://midbig:${POSTGRES_PASSWORD}@postgres:5432/midbig
       REDIS_URL: redis://redis:6379
       SITE_URL: ${SITE_URL:-https://midbig.com}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

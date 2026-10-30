@@ -4,15 +4,27 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { CoinLogo } from "./market";
 
-interface Result {
+export interface SearchResult {
   id: string;
   symbol: string;
   name: string;
   image: string | null;
   rank: number | null;
+  /** Latest price (live or delayed), at most a minute old. */
+  price: number | null;
 }
+type Result = SearchResult;
 
-export function SearchBox() {
+/** Coin search. Opens the coin's page, or calls onPick when given (for forms). */
+export function SearchBox({
+  onPick,
+  placeholder = "Search coins",
+  autoFocus,
+}: {
+  onPick?: (r: SearchResult) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+}) {
   const router = useRouter();
   const listId = useId();
   const [q, setQ] = useState("");
@@ -55,15 +67,17 @@ export function SearchBox() {
     if (!r) return;
     setOpen(false);
     setQ("");
-    router.push(`/coins/${r.id}`);
+    if (onPick) onPick(r);
+    else router.push(`/coins/${r.id}`);
   };
 
   return (
-    <div className="search" ref={boxRef}>
+    <div className={onPick ? "search picker" : "search"} ref={boxRef}>
       <input
         type="search"
-        placeholder="Search coins"
-        aria-label="Search coins"
+        placeholder={placeholder}
+        aria-label={placeholder}
+        autoFocus={autoFocus}
         role="combobox"
         aria-expanded={open && results.length > 0}
         aria-controls={listId}
@@ -81,6 +95,8 @@ export function SearchBox() {
             e.preventDefault();
             setActive((a) => Math.max(a - 1, 0));
           } else if (e.key === "Enter") {
+            // Inside a form, Enter picks the coin instead of submitting.
+            if (results.length > 0) e.preventDefault();
             go(results[active]);
           } else if (e.key === "Escape") {
             setOpen(false);

@@ -16,6 +16,7 @@ services:
       COINBASE_REST_URL: http://mock-feeds:9100
       COINBASE_WS_URL: ws://mock-feeds:9101
       KRAKEN_WS_URL: ws://mock-feeds:9102
+      SITE_URL: http://localhost:8000
     depends_on:
       mock-feeds: { condition: service_started }
 

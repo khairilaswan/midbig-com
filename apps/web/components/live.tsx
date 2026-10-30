@@ -143,3 +143,34 @@ export function useNow(ms = 5000): number {
 export function isLive(lp: LivePrice | null, now: number): boolean {
   return lp != null && isFresh(lp.asOf, now);
 }
+
+/**
+ * Latest live prices for several assets at once, for totals that depend on
+ * all of them. Re-renders whenever any of them ticks.
+ */
+export function useLivePrices(initial: { id: string; live: LivePrice | null }[]): Map<string, LivePrice> {
+  for (const r of initial) liveStore.seed(r.live);
+  const key = initial.map((r) => r.id).join(",");
+  const [, setVersion] = useState(0);
+  useEffect(() => {
+    const ids = key ? key.split(",") : [];
+    let queued = false;
+    // Coalesce a batch of ticks into one render.
+    const bump = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        setVersion((v) => v + 1);
+      });
+    };
+    const unsubs = ids.map((id) => liveStore.subscribe(id, bump));
+    return () => unsubs.forEach((u) => u());
+  }, [key]);
+  const out = new Map<string, LivePrice>();
+  for (const r of initial) {
+    const lp = liveStore.get(r.id);
+    if (lp) out.set(r.id, lp);
+  }
+  return out;
+}

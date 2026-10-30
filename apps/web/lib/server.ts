@@ -7,7 +7,7 @@ import type { AssetDetail, AssetRow } from "./types";
 // Reuse connections across hot reloads in dev and across requests in prod.
 const g = globalThis as unknown as { __pool?: pg.Pool; __redis?: Redis };
 
-function pool(): pg.Pool {
+export function pool(): pg.Pool {
   g.__pool ??= new pg.Pool({
     connectionString: process.env.DATABASE_URL ?? "postgres://midbig:midbig@localhost:5432/midbig",
     max: 10,
@@ -27,7 +27,7 @@ export const PAGE_SIZE = 100;
 
 /** Tiny in-process cache so crawler bursts don't turn into one query per hit. */
 const cache = new Map<string, { at: number; value: unknown }>();
-async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+export async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
   const value = await load();
@@ -36,7 +36,7 @@ async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Pr
   return value;
 }
 
-async function livePrices(ids: string[]): Promise<Map<string, LivePrice>> {
+export async function livePrices(ids: string[]): Promise<Map<string, LivePrice>> {
   const out = new Map<string, LivePrice>();
   if (ids.length === 0) return out;
   try {
@@ -53,10 +53,10 @@ async function livePrices(ids: string[]): Promise<Map<string, LivePrice>> {
   return out;
 }
 
-const ROW_COLUMNS = `id, symbol, name, image_url, market_cap_rank, market_cap, total_volume, circulating_supply,
+export const ROW_COLUMNS = `id, symbol, name, image_url, market_cap_rank, market_cap, total_volume, circulating_supply,
   ref_price, price_change_pct_24h, price_change_pct_7d, sparkline_7d, metadata_updated_at`;
 
-interface RowRecord {
+export interface RowRecord {
   id: string;
   symbol: string;
   name: string;
@@ -78,7 +78,7 @@ function refFromPct(price: number | null, pct: number | null): number | null {
   return price / (1 + pct / 100);
 }
 
-function toRow(r: RowRecord, live: LivePrice | undefined): AssetRow {
+export function toRow(r: RowRecord, live: LivePrice | undefined): AssetRow {
   return {
     id: r.id,
     symbol: r.symbol.toUpperCase(),
@@ -184,19 +184,28 @@ export async function searchAssets(q: string) {
   const term = q.trim().slice(0, 50);
   if (!term) return [];
   const like = term.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
-  const res = await pool().query<{ id: string; symbol: string; name: string; image_url: string | null; market_cap_rank: number | null }>(
-    `SELECT id, symbol, name, image_url, market_cap_rank FROM assets
+  const res = await pool().query<{
+    id: string;
+    symbol: string;
+    name: string;
+    image_url: string | null;
+    market_cap_rank: number | null;
+    ref_price: number | null;
+  }>(
+    `SELECT id, symbol, name, image_url, market_cap_rank, ref_price FROM assets
      WHERE symbol ILIKE $1 OR name ILIKE $1 OR name ILIKE '% ' || $1
      ORDER BY lower(symbol) = lower($2) DESC, market_cap_rank NULLS LAST
      LIMIT 8`,
     [like, term],
   );
+  const live = await livePrices(res.rows.map((r) => r.id));
   return res.rows.map((r) => ({
     id: r.id,
     symbol: r.symbol.toUpperCase(),
     name: r.name,
     image: r.image_url,
     rank: r.market_cap_rank,
+    price: live.get(r.id)?.p ?? r.ref_price,
   }));
 }
 

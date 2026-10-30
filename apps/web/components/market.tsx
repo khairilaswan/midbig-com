@@ -5,6 +5,7 @@ import { formatPct, formatUsd, formatUsdCompact, pctChange, type LivePrice } fro
 import type { AssetRow } from "@/lib/types";
 import { Sparkline } from "./sparkline";
 import { isLive, useLivePrice, useNow } from "./live";
+import { WatchButton } from "./watch-button";
 
 /** Price to show: the live exchange price when we have one, else the provider's last price. */
 export function displayPrice(row: AssetRow, lp: LivePrice | null): number | null {
@@ -61,13 +62,18 @@ export function CoinLogo({ src, symbol, size = 24 }: { src: string | null; symbo
   return <img src={src} alt="" width={size} height={size} loading="lazy" className="logo" />;
 }
 
-function MarketRow({ row }: { row: AssetRow }) {
+function MarketRow({ row, watch }: { row: AssetRow; watch: boolean }) {
   const lp = useLivePrice(row.id, row.live);
   const price = displayPrice(row, lp);
   // Market cap moves with the price between metadata refreshes.
   const mcap = row.marketCap != null && row.refPrice && price ? row.marketCap * (price / row.refPrice) : row.marketCap;
   return (
     <tr>
+      {watch && (
+        <td className="watch-cell">
+          <WatchButton assetId={row.id} name={row.name} initial signedIn compact refresh />
+        </td>
+      )}
       <td className="num muted rank">{row.rank ?? "—"}</td>
       <td className="coin">
         <Link href={`/coins/${row.id}`}>
@@ -94,12 +100,18 @@ function MarketRow({ row }: { row: AssetRow }) {
   );
 }
 
-export function MarketTable({ rows }: { rows: AssetRow[] }) {
+/** watch adds a star column for removing rows (the watchlist page). */
+export function MarketTable({ rows, watch = false }: { rows: AssetRow[]; watch?: boolean }) {
   return (
     <div className="table-wrap">
       <table className="market">
         <thead>
           <tr>
+            {watch && (
+              <th className="watch-cell">
+                <span className="sr-only">Watching</span>
+              </th>
+            )}
             <th className="num rank">#</th>
             <th>Coin</th>
             <th className="num">Price</th>
@@ -112,7 +124,7 @@ export function MarketTable({ rows }: { rows: AssetRow[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <MarketRow key={r.id} row={r} />
+            <MarketRow key={r.id} row={r} watch={watch} />
           ))}
         </tbody>
       </table>

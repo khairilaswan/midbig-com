@@ -41,6 +41,17 @@ export const config = {
     restUrl: env("COINBASE_REST_URL", "https://api.exchange.coinbase.com"),
     enabled: env("COINBASE_ENABLED", "true") === "true",
   },
+  alerts: {
+    /** Public site address, for links in alert emails. */
+    siteUrl: (process.env.SITE_URL ?? "http://localhost:8000").replace(/\/$/, ""),
+    /** Resend API key for alert emails; without it alerts only go out as notifications. */
+    resendApiKey: process.env.RESEND_API_KEY ?? "",
+    emailFrom: process.env.EMAIL_FROM || "midbig <alerts@midbig.com>",
+    /** Optional fixed web push keys; by default the pair stored in the database is used. */
+    vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+    vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+  },
+
   kraken: {
     wsUrl: env("KRAKEN_WS_URL", "wss://ws.kraken.com/v2"),
     enabled: env("KRAKEN_ENABLED", "true") === "true",
