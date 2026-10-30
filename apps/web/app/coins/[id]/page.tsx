@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import { formatUsd } from "@midbig/shared";
 import { CoinHeader } from "@/components/coin-header";
 import { PriceChart } from "@/components/price-chart";
+import { WatchButton } from "@/components/watch-button";
+import { getSession } from "@/lib/auth";
 import { getAsset } from "@/lib/server";
+import { isWatched } from "@/lib/user-data";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +27,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function CoinPage({ params }: Props) {
-  const asset = await getAsset((await params).id);
+  const [asset, session] = await Promise.all([getAsset((await params).id), getSession()]);
   if (!asset) notFound();
+  const watched = session ? await isWatched(session.user.id, asset.id) : false;
 
   return (
     <article className="coin">
@@ -33,6 +37,15 @@ export default async function CoinPage({ params }: Props) {
         <Link href="/">Coins</Link> <span aria-hidden>›</span> <span>{asset.name}</span>
       </nav>
       <CoinHeader asset={asset} />
+      <div className="coin-actions">
+        <WatchButton assetId={asset.id} name={asset.name} initial={watched} signedIn={!!session} />
+        <Link href={`/portfolio?add=${asset.id}`} className="btn secondary small">
+          + Add to portfolio
+        </Link>
+        <Link href={`/alerts?coin=${asset.id}`} className="btn secondary small">
+          🔔 Price alert
+        </Link>
+      </div>
       <PriceChart id={asset.id} initialLive={asset.live} />
       <section className="about">
         <h2>About {asset.name} prices</h2>

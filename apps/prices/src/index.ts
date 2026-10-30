@@ -1,5 +1,6 @@
 import { Redis } from "ioredis";
 import { MAX_PRICE_AGE_MS, isFresh } from "@midbig/shared";
+import { startAlertChecker } from "./alerts.js";
 import { config } from "./config.js";
 import { CoinGeckoClient } from "./coingecko.js";
 import { createPool, migrate } from "./db.js";
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
 
   const stopPublisher = startPublisher(state, redis);
   const stopCandles = startCandleWriter(state, pool);
+  const stopAlerts = startAlertChecker(state, pool, config.alerts);
 
   const stopGateway = await startGateway({
     port: config.port,
@@ -94,6 +96,7 @@ async function main(): Promise<void> {
     clearInterval(backfillTimer);
     for (const f of feeds) f.stop();
     stopPublisher();
+    await stopAlerts();
     await stopCandles();
     await stopGateway();
     redis.disconnect();

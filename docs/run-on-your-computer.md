@@ -21,11 +21,9 @@ git clone https://github.com/khairilaswan/midbig-com.git
 cd midbig-com
 ```
 
-Until the pull request is merged, switch to its branch:
-
-```sh
-git checkout claude/project-thread-f9lfyg
-```
+To try changes before their pull request is merged, switch to its branch
+(for Phase 2: `git checkout claude/project-thread-872toh`), and back with
+`git checkout main`.
 
 ## 3. Create the settings file (one time)
 
@@ -54,6 +52,32 @@ The first start takes a few minutes while it builds. Then open:
 Prices should start moving within a few seconds. Charts fill in as the
 1-minute candles build up. The 30-day and 1-year history downloads in the
 background, one coin every few seconds, so it takes about 30 minutes to finish.
+
+## Accounts, portfolio and alerts
+
+- Click **Sign up** at the top right and create an account with any email and
+  password. Nothing is emailed, so the email doesn't have to be real while testing.
+- **Portfolio**: add your buys and sells; value and profit update live.
+- **What if**: pick a scenario such as "BTC drops to $70k". It works without an
+  account too.
+- **Alerts**: create one, then press **Turn on notifications on this device**
+  and **Send a test**. Notifications work at http://localhost:8000 in Chrome,
+  Edge and Firefox.
+- **Forgot your password?** Until email is set up, the reset link is printed
+  in the log. Run `docker compose logs web` and look for "Reset your midbig password".
+
+### On your phone
+
+Phones need an `https://` address for notifications and "Add to Home Screen",
+so use the Cloudflare link from "show it to a friend" below. Open it on the
+phone, log in, then:
+
+- Android (Chrome): menu ⋮ > **Add to Home screen** (or **Install app**).
+- iPhone (Safari): Share > **Add to Home Screen**, then open midbig from the
+  Home Screen. iPhones only allow notifications from the Home Screen app.
+
+The free Cloudflare link changes every time you start it, and each new link
+needs notifications turned on again.
 
 ## Everyday commands
 

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { currentPrice } from "../src/alerts.ts";
 import { CandleBuilder, MarketState } from "../src/market.ts";
 import { buildSymbolMap, downsample } from "../src/metadata.ts";
 import { coinbaseUsdMarkets, parseCoinbaseMessage } from "../src/sources/coinbase.ts";
@@ -140,4 +141,16 @@ test("MarketState: newest trade wins and asOf follows live feeds", () => {
 
   assert.deepEqual(s.takeDirty().map((p) => p.id), ["bitcoin"]);
   assert.deepEqual(s.takeDirty(), []);
+});
+
+test("alerts use whichever of the exchange and CoinGecko prices is newer", () => {
+  const s = new MarketState();
+  s.addCoverage("coinbase", "bitcoin");
+  s.alive("coinbase", T0);
+  s.trade({ assetId: "bitcoin", source: "coinbase", price: 100, size: 1, ts: T0 });
+  assert.equal(currentPrice(s, { asset_id: "bitcoin", ref_price: 90, metadata_ms: T0 - 60_000 }), 100);
+  // Feed went quiet long ago; CoinGecko's later price wins.
+  assert.equal(currentPrice(s, { asset_id: "bitcoin", ref_price: 90, metadata_ms: T0 + 600_000 }), 90);
+  // No exchange quotes the coin at all.
+  assert.equal(currentPrice(s, { asset_id: "pepe", ref_price: 0.00001, metadata_ms: T0 }), 0.00001);
 });

@@ -2,6 +2,10 @@
 # CoinGecko data, at http://localhost:8000. See docs/run-on-your-computer.md.
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 services:
+  prices:
+    environment:
+      SITE_URL: http://localhost:8000
+
   web:
     environment:
       SITE_URL: http://localhost:8000

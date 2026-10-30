@@ -1,7 +1,9 @@
 # midbig.com
 
 Live crypto prices, charts and market caps, built to run on one small server.
-This is Phase 1 of the MVP plan: crypto only, with forex and US stocks to follow.
+Phase 1 of the MVP plan is the price site; Phase 2 adds accounts, a watchlist, a
+portfolio tracker, a what-if simulator, price alerts and an installable app.
+Crypto only for now, with forex and US stocks to follow.
 
 ## How it works
 
@@ -22,8 +24,33 @@ CoinGecko ───┘   (Node)             ├─ Redis pub/sub "ticks" ─ /ws
 - **apps/web** is the Next.js site: the ranked coin list with pagination, a page per coin with stats and a chart,
   gainers and losers, search, `sitemap.xml` and `robots.txt`. Pages render on the server from Postgres and Redis,
   then switch to the live stream in the browser.
-- **packages/shared** has the types and number formatting both use.
+- **packages/shared** has the types and number formatting both use, plus the portfolio maths (average cost
+  profit and loss), the what-if simulator and risk figures, so they can be unit tested and run in the browser.
 - **db/migrations** is the schema. The price service applies new migrations on start.
+
+### Accounts and portfolio tools (Phase 2)
+
+- **Accounts** use [Better Auth](https://www.better-auth.com) with email and password (and Google when
+  `GOOGLE_CLIENT_ID` is set). Its tables are in `db/migrations/002_accounts.sql`, applied like the others.
+  Sessions last 30 days.
+- **Watchlist** (`/watchlist`): star coins from their page; the list shows live prices.
+- **Portfolio** (`/portfolio`): buys and sells, valued live. Profit uses the average cost method, and a sell
+  that would take a holding below zero is refused.
+- **What if** (`/what-if`): presets such as "BTC drops to $70k" (round numbers about 20% from today's price),
+  a market crash, a bear market and altcoin season, or your own moves. Other coins follow Bitcoin by their
+  90-day beta; stablecoins (detected from price and volatility) stay put. A risk panel replays the last year's
+  daily moves on today's holdings (95% one-day loss, worst day, concentration). Works without an account,
+  saving holdings in the browser.
+- **Price alerts** (`/alerts`): one-shot "above" or "below" alerts. The price service checks them every
+  5 seconds against exchange prices (or CoinGecko's for coins no exchange lists) and sends a web push
+  notification to every device the user turned notifications on for, plus an email when `RESEND_API_KEY`
+  is set. The push key pair is generated on first use and stored in the `app_secrets` table.
+- **Installable app**: `manifest.webmanifest`, icons and a service worker (`public/sw.js`) that shows
+  notifications and an offline page. Pages are never cached, since prices must be fresh.
+
+Both apps only share Postgres and Redis, so the site can move to Vercel later with the price service on a
+small always-on server: the web app needs `DATABASE_URL`, `REDIS_URL`, `PUBLIC_WS_URL`, `SITE_URL` and
+`BETTER_AUTH_SECRET`.
 
 ### The 1-minute freshness rule
 
@@ -73,7 +100,7 @@ The stack is sized for a 2 vCPU / 4 GB VPS (for example a Hetzner Cloud server i
 3. On the server:
    ```sh
    git clone https://github.com/khairilaswan/midbig-com.git && cd midbig-com
-   cp .env.example .env   # set POSTGRES_PASSWORD and COINGECKO_API_KEY
+   cp .env.example .env   # set POSTGRES_PASSWORD, BETTER_AUTH_SECRET and COINGECKO_API_KEY
    docker compose up -d --build
    ```
    Caddy gets the TLS certificate by itself on first start.
@@ -92,3 +119,12 @@ Set in `.env` (see `.env.example`). The price service also reads these optional 
 | `COINGECKO_SYNC_MINUTES` | 15 | Minutes between market data refreshes (about 5,800 calls a month at 500 coins) |
 | `COINGECKO_BACKFILL_DAYS` | 365 | Days of daily history fetched once per coin |
 | `COINBASE_ENABLED`, `KRAKEN_ENABLED` | true | Turn a feed off |
+
+Accounts and alerts (web and price service):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `BETTER_AUTH_SECRET` | derived from the database URL | Signs login cookies. Set a random one before launch |
+| `RESEND_API_KEY`, `EMAIL_FROM` | empty | Password reset and alert emails. Without a key, reset links go to the web log |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Adds "Continue with Google" |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | generated, stored in the database | Fixed web push keys, if you want them in config |
