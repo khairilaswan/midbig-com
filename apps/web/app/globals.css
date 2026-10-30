@@ -1,0 +1,610 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --text: #0d1117;
+  --muted: #59636e;
+  --line: #e4e8ec;
+  --accent: #2f6fed;
+  --up: #0a8a4a;
+  --down: #d1242f;
+  --delayed: #b26b00;
+  --radius: 10px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --text: #e6edf3;
+    --muted: #8d96a0;
+    --line: #262c36;
+    --accent: #4c8dff;
+    --up: #3fb950;
+    --down: #f85149;
+    --delayed: #d29922;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+h1,
+h2 {
+  line-height: 1.25;
+}
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Header */
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.brand {
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+
+.brand span {
+  color: var(--accent);
+}
+
+.nav {
+  display: flex;
+  gap: 16px;
+  font-weight: 500;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 100%;
+  order: 3;
+}
+
+.search input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+}
+
+.search-results li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-results li.active {
+  background: var(--surface);
+}
+
+.search-results .rank {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+@media (min-width: 720px) {
+  .search {
+    flex: 0 1 280px;
+    order: 0;
+    margin-left: auto;
+  }
+}
+
+/* Page */
+main {
+  padding-top: 20px;
+  padding-bottom: 40px;
+  min-height: 70vh;
+}
+
+.page-title {
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 20px;
+  max-width: 70ch;
+}
+
+.empty {
+  padding: 40px 0;
+  color: var(--muted);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.card h2 {
+  font-size: 15px;
+  margin: 0 0 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.card h2 a {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.mover-cards {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 720px) {
+  .mover-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.movers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.movers a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.movers .price-val {
+  margin-left: auto;
+}
+
+.movers .chg {
+  min-width: 70px;
+  text-align: right;
+}
+
+/* Market table */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table.market {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.market th,
+.market td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.market th {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: left;
+}
+
+.market .num {
+  text-align: right;
+}
+
+.market .rank {
+  width: 1%;
+}
+
+.market .coin a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.sym {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.9em;
+}
+
+.market .coin .name {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market .price {
+  font-weight: 600;
+}
+
+.market .spark {
+  width: 120px;
+}
+
+.hide-sm,
+.hide-md {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .hide-sm {
+    display: table-cell;
+  }
+}
+
+@media (min-width: 960px) {
+  .hide-md {
+    display: table-cell;
+  }
+}
+
+.chg.up {
+  color: var(--up);
+}
+
+.chg.down {
+  color: var(--down);
+}
+
+.sparkline.up path {
+  stroke: var(--up);
+}
+
+.sparkline.down path {
+  stroke: var(--down);
+}
+
+.logo {
+  border-radius: 50%;
+  flex: none;
+}
+
+.logo-fallback {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Freshness indicator */
+.fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.fresh i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.fresh.live {
+  color: var(--up);
+}
+
+.fresh.live i {
+  background: var(--up);
+}
+
+.fresh.delayed {
+  color: var(--delayed);
+}
+
+.fresh.delayed i {
+  background: var(--delayed);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.pager a {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.pager a[aria-current="page"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.split {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 1100px) {
+  .split {
+    grid-template-columns: 1fr 1fr;
+  }
+  .split .hide-md {
+    display: none;
+  }
+}
+
+.split h2 {
+  font-size: 18px;
+}
+
+/* Coin page */
+.crumbs {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.coin-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.coin-head h1 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.coin-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-price .big {
+  font-size: 34px;
+  font-weight: 700;
+}
+
+.coin-price .chg {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.coin-fresh {
+  margin: 4px 0 16px;
+  font-size: 13px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 24px;
+  margin: 0 0 24px;
+}
+
+@media (min-width: 640px) {
+  .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stats dt {
+  color: var(--muted);
+}
+
+.stats dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 24px;
+}
+
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.chart-head h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.ranges {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.ranges button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ranges button[aria-selected="true"] {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.chart {
+  position: relative;
+  height: 320px;
+}
+
+.chart-msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.about h2 {
+  font-size: 18px;
+}
+
+.about p {
+  max-width: 75ch;
+  color: var(--muted);
+}
+
+/* Footer */
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding: 20px 0 32px;
+  font-size: 13px;
+}
+
+.site-footer p {
+  margin: 0 0 8px;
+  max-width: 90ch;
+}
+
+.site-footer a {
+  text-decoration: underline;
+}
+
+/* Phones: keep #, coin, price and 24h on screen without sideways scrolling. */
+@media (max-width: 639px) {
+  .market th,
+  .market td {
+    padding: 10px 5px;
+  }
+  .market .coin .sym,
+  .market .rank,
+  .market .fresh.delayed span {
+    display: none;
+  }
+  .market .coin .name {
+    max-width: 10ch;
+  }
+}

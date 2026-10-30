@@ -1,0 +1,106 @@
+# Production stack for one small server (sized for a 2 vCPU / 4 GB VPS).
+#   cp .env.example .env   # then fill it in
+#   docker compose up -d --build
+name: midbig
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: midbig
+      POSTGRES_DB: midbig
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+      # Skip timescaledb-tune's guesses; the limits below are set for this box.
+      NO_TS_TUNE: "true"
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=timescaledb
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    shm_size: 256mb
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U midbig -d midbig"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Only holds the latest prices, which the price service rebuilds in seconds; no persistence needed.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  prices:
+    build:
+      context: .
+      dockerfile: apps/prices/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://midbig:${POSTGRES_PASSWORD}@postgres:5432/midbig
+      REDIS_URL: redis://redis:6379
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://midbig:${POSTGRES_PASSWORD}@postgres:5432/midbig
+      REDIS_URL: redis://redis:6379
+      SITE_URL: ${SITE_URL:-https://midbig.com}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      prices: { condition: service_started }
+    mem_limit: 768m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-midbig.com, www.midbig.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - prices
+    mem_limit: 128m
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

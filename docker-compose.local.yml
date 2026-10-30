@@ -1,0 +1,13 @@
+# Runs the real site on your own computer, with live Coinbase, Kraken and
+# CoinGecko data, at http://localhost:8000. See docs/run-on-your-computer.md.
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+services:
+  web:
+    environment:
+      SITE_URL: http://localhost:8000
+
+  caddy:
+    ports: !override
+      - "8000:80"
+    environment:
+      SITE_ADDRESS: ":80"
