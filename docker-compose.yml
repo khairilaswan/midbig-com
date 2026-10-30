@@ -3,8 +3,16 @@
 #   docker compose up -d --build
 name: midbig
 
+# Keep container logs small; they hold IP addresses (see the privacy policy).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *logging
     image: timescale/timescaledb:2.17.2-pg16
     restart: unless-stopped
     environment:
@@ -37,6 +45,7 @@ services:
       retries: 20
 
   redis:
+    logging: *logging
     image: redis:7-alpine
     restart: unless-stopped
     # Only holds the latest prices, which the price service rebuilds in seconds; no persistence needed.
@@ -49,6 +58,7 @@ services:
       retries: 20
 
   prices:
+    logging: *logging
     build:
       context: .
       dockerfile: apps/prices/Dockerfile
@@ -71,6 +81,7 @@ services:
       start_period: 60s
 
   web:
+    logging: *logging
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -84,6 +95,9 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -91,6 +105,7 @@ services:
     mem_limit: 768m
 
   caddy:
+    logging: *logging
     image: caddy:2-alpine
     restart: unless-stopped
     ports:

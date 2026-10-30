@@ -2,6 +2,8 @@
  * Types and helpers shared by the price service and the web app.
  */
 
+import type { ChatEvent } from "./chat.js";
+
 /** A price is shown as live only if a feed confirmed it within this window. */
 export const MAX_PRICE_AGE_MS = 60_000;
 
@@ -30,10 +32,17 @@ export interface LivePrice {
 /** Message sent from the price service to browsers. */
 export type ServerMessage =
   | { type: "ticks"; now: number; data: LivePrice[] }
+  | ChatEvent
+  /** People with the room open, sent on join and when it changes. */
+  | { type: "presence"; room: string; n: number }
   | { type: "error"; message: string };
 
 /** Message sent from browsers to the price service. */
-export type ClientMessage = { op: "sub"; ids: string[] } | { op: "unsub"; ids: string[] };
+export type ClientMessage =
+  | { op: "sub"; ids: string[] }
+  | { op: "unsub"; ids: string[] }
+  | { op: "join"; rooms: string[] }
+  | { op: "leave"; rooms: string[] };
 
 /** Most asset ids a single browser connection may subscribe to. */
 export const MAX_SUBSCRIPTIONS = 300;
@@ -96,3 +105,4 @@ export function formatPct(value: number | null | undefined): string {
 export * from "./portfolio.js";
 export * from "./simulate.js";
 export * from "./alerts.js";
+export * from "./chat.js";

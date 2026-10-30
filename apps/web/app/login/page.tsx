@@ -4,6 +4,7 @@ import { LoginForm } from "@/components/auth-forms";
 import { googleEnabled } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Log in", robots: { index: false } };
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
   const { reset } = await searchParams;

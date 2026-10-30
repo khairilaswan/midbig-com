@@ -2,8 +2,10 @@
 
 Live crypto prices, charts and market caps, built to run on one small server.
 Phase 1 of the MVP plan is the price site; Phase 2 adds accounts, a watchlist, a
-portfolio tracker, a what-if simulator, price alerts and an installable app.
-Crypto only for now, with forex and US stocks to follow.
+portfolio tracker, a what-if simulator, price alerts and an installable app;
+Phase 3 adds live chat with a scam filter and moderation, two-factor login and
+the legal pages needed to launch. Crypto only for now, with forex and US stocks
+to follow.
 
 ## How it works
 
@@ -51,6 +53,37 @@ CoinGecko ───┘   (Node)             ├─ Redis pub/sub "ticks" ─ /ws
 Both apps only share Postgres and Redis, so the site can move to Vercel later with the price service on a
 small always-on server: the web app needs `DATABASE_URL`, `REDIS_URL`, `PUBLIC_WS_URL`, `SITE_URL` and
 `BETTER_AUTH_SECRET`.
+
+### Chat, moderation and launch pages (Phase 3)
+
+- **Rooms**: one for everyone (`/chat`) and one on every coin page. Messages travel over the same `/ws`
+  connection as prices: the web app checks and stores a message (`POST /api/chat`), publishes it on the Redis
+  `chat` channel, and the gateway forwards it to browsers in that room. Reading needs no account.
+- **Posting rules** (`packages/shared/src/chat.ts`): a chat name is picked before the first message, so emails
+  never show; names that look like staff (`admin`, `midbig_support`, `Kha1` next to a moderator `Khai`) are
+  refused. New accounts read for 10 minutes before posting and can't post links for 24 hours; everyone is
+  limited to one message every 3 seconds and 200 an hour; repeats, all caps and spam floods are refused.
+- **Scam filter**: wallet addresses, Telegram/WhatsApp/Discord invites (also spelled "t . me"), phone numbers,
+  "DM me", promised returns, seed phrase talk, giveaways, staff impersonation, pump spam, link shorteners,
+  lookalike domains (`coinbase-verify.xyz`) and links to sites off the allow list are **held**: stored, shown
+  only to the author, and put in the moderation queue.
+- **Reports and mutes**: the ⋯ menu on a message reports it (scam, spam, abuse, other) or mutes the person for
+  you. Three reports hide a message until a moderator looks.
+- **Moderation** (`/mod`): held and reported messages with the filter's reasons and the reports, plus approve,
+  remove, remove and ban 24 hours, and ban for good. A ban also removes the person's last day of messages.
+  Admins (from `ADMIN_EMAILS`) make moderators. The page and every moderator action need two-factor login on.
+  The header line shows the launch gate: of the messages removed in the last week, how many the filter caught
+  before anyone reported them.
+- **Two-factor login**: authenticator app codes with backup codes and "trust this device for 30 days"
+  (Better Auth's two-factor plugin), set up on the account page. It applies to password logins; Google logins
+  rely on Google's own check.
+- **Bot check**: Cloudflare Turnstile on sign-up and on each member's first chat message, when
+  `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set.
+- **Legal and privacy**: `/terms`, `/privacy` (US state laws, GDPR, PDPA), `/rules`, and `/privacy-choices`
+  (the "Do Not Sell or Share" link, honouring Global Privacy Control), a cookie banner that records the
+  visitor's choice for future ad or analytics scripts (`optionalCookiesAllowed()` in `components/privacy.tsx`),
+  and "Download my data" on the account page. The texts are a starting point; have a lawyer read them before
+  launch. Questions and takedowns go to `support@midbig.com` (`CONTACT_EMAIL` in `apps/web/lib/site.ts`).
 
 ### The 1-minute freshness rule
 
@@ -128,3 +161,10 @@ Accounts and alerts (web and price service):
 | `RESEND_API_KEY`, `EMAIL_FROM` | empty | Password reset and alert emails. Without a key, reset links go to the web log |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Adds "Continue with Google" |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | generated, stored in the database | Fixed web push keys, if you want them in config |
+
+Chat (web):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `ADMIN_EMAILS` | empty | Comma-separated emails whose accounts are admins (moderation queue, bans, making moderators) |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | empty | Cloudflare Turnstile bot check on sign-up and first chat message |

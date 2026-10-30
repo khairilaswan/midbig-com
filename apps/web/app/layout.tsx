@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AccountMenu } from "@/components/account-menu";
 import { LiveConnection } from "@/components/live";
+import { CookieBanner } from "@/components/privacy";
 import { RegisterServiceWorker } from "@/components/register-sw";
 import { SearchBox } from "@/components/search-box";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/watchlist">Watchlist</Link>
               <Link href="/portfolio">Portfolio</Link>
               <Link href="/what-if">What if</Link>
+              <Link href="/chat">Chat</Link>
             </nav>
             <SearchBox />
             <AccountMenu />
@@ -65,9 +67,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </a>
               . A price is marked &ldquo;Delayed&rdquo; when no exchange has confirmed it in the last 60 seconds.
             </p>
+            <p className="footer-links">
+              <Link href="/terms">Terms</Link>
+              <Link href="/privacy">Privacy</Link>
+              <Link href="/rules">Community rules</Link>
+              <Link href="/privacy-choices">Do Not Sell or Share My Personal Information</Link>
+            </p>
             <p className="muted">© {new Date().getFullYear()} midbig.com</p>
           </div>
         </footer>
+        <CookieBanner />
       </body>
     </html>
   );

@@ -22,7 +22,7 @@ cd midbig-com
 ```
 
 To try changes before their pull request is merged, switch to its branch
-(for Phase 2: `git checkout claude/project-thread-872toh`), and back with
+(for Phase 3: `git checkout claude/project-thread-8u0fye`), and back with
 `git checkout main`.
 
 ## 3. Create the settings file (one time)
@@ -32,7 +32,11 @@ Create a file called `.env` in the `midbig-com` folder with:
 ```
 POSTGRES_PASSWORD=pick-any-long-password
 COINGECKO_API_KEY=
+ADMIN_EMAILS=you@example.com
 ```
+
+Put the email you sign up with after `ADMIN_EMAILS=`. That account becomes the
+admin who runs the chat moderation queue.
 
 The CoinGecko key is optional. Without it, the first load of coin history is
 slower. You can get a free Demo key at https://www.coingecko.com/en/api/pricing
@@ -65,6 +69,22 @@ background, one coin every few seconds, so it takes about 30 minutes to finish.
   Edge and Firefox.
 - **Forgot your password?** Until email is set up, the reset link is printed
   in the log. Run `docker compose logs web` and look for "Reset your midbig password".
+
+## Chat and moderation
+
+- **Chat** is in the top menu, and every coin page has its own room below the
+  chart. Anyone can read; posting needs an account and a chat name.
+- New accounts must wait 10 minutes before posting and 24 hours before posting
+  links. Your admin account skips the wait.
+- Try a scam message such as `DM me on telegram for 100x signals`. It shows
+  only to you, marked "Only you can see this", and lands in the queue.
+- **Moderation**: on your account page, set up **Two-factor login** with an
+  authenticator app on your phone (Google Authenticator, Microsoft
+  Authenticator), and save the backup codes. Then open
+  http://localhost:8000/mod to approve or remove held and reported messages,
+  ban people, and make friends moderators (they need two-factor login too).
+- To test as a second person, open a private (incognito) window and sign up
+  with another email.
 
 ### On your phone
 

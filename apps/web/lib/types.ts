@@ -1,4 +1,4 @@
-import type { LivePrice } from "@midbig/shared";
+import type { ChatMessage, LivePrice } from "@midbig/shared";
 
 /** One asset as the market tables need it. Serialisable, so it can go to client components. */
 export interface AssetRow {
@@ -29,4 +29,28 @@ export interface AssetDetail extends AssetRow {
   athDate: number | null;
   atl: number | null;
   atlDate: number | null;
+}
+
+/** Why someone can't post in chat yet. */
+export type PostBlock =
+  | { reason: "login" }
+  | { reason: "name" }
+  | { reason: "new"; until: number }
+  | { reason: "banned"; until: number | null };
+
+/** What a chat room sends the browser when it opens. */
+export interface ChatState {
+  messages: ChatMessage[];
+  /** User ids the viewer muted. */
+  muted: string[];
+  me: {
+    id: string;
+    name: string | null;
+    isStaff: boolean;
+    /** Staff with two-factor login on. */
+    canModerate: boolean;
+    block: PostBlock | null;
+  } | null;
+  /** Turnstile site key when the first-message bot check is on. */
+  captchaSiteKey: string | null;
 }
