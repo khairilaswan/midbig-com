@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { isStance, REPORT_REASONS, type ReportReason, type Stance } from "@midbig/shared";
+import { isFlair, isStance, REPORT_REASONS, type Flair, type ReportReason, type Stance } from "@midbig/shared";
 import { getSession } from "@/lib/auth";
 import { canModerate, getViewer, type Viewer } from "@/lib/chat";
 import { canModerateCommunity, logAction } from "@/lib/communities";
@@ -77,6 +77,9 @@ export async function startTopic(input: {
   title: string;
   body: string;
   stance?: Stance | null;
+  flair?: Flair | null;
+  images?: string[];
+  poll?: { options: string[]; hours: number } | null;
   captcha?: string;
 }): Promise<WriteResult> {
   return write(async () => {
@@ -86,6 +89,9 @@ export async function startTopic(input: {
       title: String(input.title ?? ""),
       body: String(input.body ?? ""),
       stance: isStance(input.stance) ? input.stance : null,
+      flair: isFlair(input.flair) ? input.flair : null,
+      images: input.images,
+      poll: input.poll && typeof input.poll === "object" ? { options: input.poll.options, hours: input.poll.hours } : null,
       captcha: typeof input.captcha === "string" ? input.captcha : undefined,
       ip: await clientIp(),
     });
@@ -94,13 +100,20 @@ export async function startTopic(input: {
   });
 }
 
-export async function postReply(input: { topicId: string; parentId?: string | null; body: string; captcha?: string }): Promise<WriteResult> {
+export async function postReply(input: {
+  topicId: string;
+  parentId?: string | null;
+  body: string;
+  images?: string[];
+  captcha?: string;
+}): Promise<WriteResult> {
   return write(async () => {
     if (!validId(input.topicId)) return { ok: false, error: "That topic is gone." };
     return createReply(await viewerOrNull(), {
       topicId: input.topicId,
       parentId: validId(input.parentId) ? input.parentId : null,
       body: String(input.body ?? ""),
+      images: input.images,
       captcha: typeof input.captcha === "string" ? input.captcha : undefined,
       ip: await clientIp(),
     });

@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { BOT_KINDS, type BotKind } from "@midbig/shared";
 import type { ActionResult } from "@/app/actions";
+import { adminSaveLook } from "@/app/look-actions";
+import type { SiteLook } from "@/lib/look";
+import { LookPicker } from "./look-picker";
 import {
   adminCommunityMod,
   adminCommunityStatus,
@@ -11,6 +14,7 @@ import {
   adminCreateDefaults,
   adminSetCategory,
   adminUpdateBot,
+  adminRemovePhotos,
   adminVerify,
 } from "@/app/admin-actions";
 
@@ -124,6 +128,37 @@ export function VerifyButton({ userId, verified }: { userId: string; verified: b
     <span className="row-gap">
       <button type="button" className={`btn small ${verified ? "secondary" : ""}`} disabled={pending} onClick={() => run(() => adminVerify(userId, !verified))}>
         {verified ? "Unverify" : "Verify"}
+      </button>
+      {msg && <span className="small form-error">{msg}</span>}
+    </span>
+  );
+}
+
+/** The site look picker plus the switch for members' own looks; both save together. */
+export function SiteLookForm({ look }: { look: SiteLook }) {
+  const [memberChoice, setMemberChoice] = useState(look.memberChoice);
+  return (
+    <LookPicker
+      current={look}
+      siteDefault={look}
+      saveLabel="Save as the site's look"
+      save={(l) => adminSaveLook(l, memberChoice)}
+      extra={
+        <label className="switch">
+          <input type="checkbox" checked={memberChoice} onChange={(e) => setMemberChoice(e.target.checked)} /> Let members and
+          visitors pick their own look in Appearance settings
+        </label>
+      }
+    />
+  );
+}
+
+export function RemovePhotosButton({ userId }: { userId: string }) {
+  const { run, pending, msg } = useAction();
+  return (
+    <span className="row-gap">
+      <button type="button" className="btn link small danger-text" disabled={pending} onClick={() => run(() => adminRemovePhotos(userId))}>
+        Remove photos
       </button>
       {msg && <span className="small form-error">{msg}</span>}
     </span>

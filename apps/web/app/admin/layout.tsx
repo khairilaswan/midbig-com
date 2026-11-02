@@ -13,6 +13,7 @@ const TABS = [
   ["/admin/communities", "Communities"],
   ["/admin/users", "Members"],
   ["/admin/bots", "Bots"],
+  ["/admin/look", "Look"],
   ["/mod", "Reports and moderation"],
   ["/admin/log", "Log"],
 ] as const;

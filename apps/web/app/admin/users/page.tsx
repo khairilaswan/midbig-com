@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { profilePath } from "@midbig/shared";
-import { VerifyButton } from "@/components/admin";
+import { RemovePhotosButton, VerifyButton } from "@/components/admin";
 import { searchUsers } from "@/lib/admin";
 
 type Props = { searchParams: Promise<{ q?: string }> };
@@ -44,6 +44,7 @@ export default async function AdminUsers({ searchParams }: Props) {
                 <td>{new Date(u.joined).toLocaleDateString("en-US", { dateStyle: "medium" })}</td>
                 <td>
                   <VerifyButton userId={u.id} verified={u.verified} />
+                  {u.hasPhoto && <RemovePhotosButton userId={u.id} />}
                   {u.communities > 0 && <div className="small muted">{u.communities} m/ made</div>}
                 </td>
               </tr>

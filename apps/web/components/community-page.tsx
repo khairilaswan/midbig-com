@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import {
+  FLAIRS,
+  isFlair,
+  type Flair,
   assetPath,
   bullShare,
   formatAssetPrice,
@@ -26,7 +29,7 @@ import { isWatched } from "@/lib/user-data";
 
 export type CommunityProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ tab?: string; sort?: string; t?: string; page?: string }>;
+  searchParams: Promise<{ tab?: string; sort?: string; t?: string; page?: string; flair?: string }>;
 };
 
 const TABS = { forum: "Forum", chart: "Chart", chat: "Chat", info: "Info" } as const;
@@ -140,7 +143,7 @@ export async function CommunityPage({ ns, props }: { ns: Namespace; props: Commu
       <div className="forum-cols">
         <section>
           {tab === "forum" && (
-            <ForumTab c={c} me={me} sort={sort} window={window} page={page} viewerId={viewer?.id} />
+            <ForumTab c={c} me={me} sort={sort} window={window} page={page} viewerId={viewer?.id} flair={isFlair(sp.flair) ? sp.flair : null} />
           )}
           {tab === "chat" && <ChatRoom room={chatRoomFor(c)} title={`${c.label} chat`} tall />}
           {tab === "chart" && asset && (
@@ -216,6 +219,7 @@ async function ForumTab({
   window,
   page,
   viewerId,
+  flair,
 }: {
   c: Community;
   me: Awaited<ReturnType<typeof forumViewer>>["me"];
@@ -223,13 +227,34 @@ async function ForumTab({
   window: ReturnType<typeof parseWindow>;
   page: number;
   viewerId?: string;
+  flair: Flair | null;
 }) {
-  const { topics, hasMore } = await listTopics({ communityId: c.id, sort, window, page, viewerId });
+  const { topics, hasMore } = await listTopics({ communityId: c.id, sort, window, page, viewerId, flair });
+  const extra: Record<string, string> = flair ? { flair } : {};
+  const sortHref = (f: Flair | null) => {
+    const q = sortQuery(sort, window, f ? { flair: f } : {});
+    return `${c.path}${q}`;
+  };
   return (
     <>
-      <SortTabs path={c.path} sort={sort} window={window} />
-      <TopicList topics={topics} me={me} showCommunity={false} empty={`Nothing in ${c.label} yet. Start the first topic.`} />
-      <Pager base={`${c.path}${sortQuery(sort, window)}`} page={page} hasMore={hasMore} />
+      <SortTabs path={c.path} sort={sort} window={window} extra={extra} />
+      <nav className="flair-filter small" aria-label="Filter by flair">
+        <Link href={sortHref(null)} aria-current={!flair ? "page" : undefined}>
+          All
+        </Link>
+        {(Object.keys(FLAIRS) as Flair[]).map((f) => (
+          <Link key={f} href={sortHref(f)} aria-current={flair === f ? "page" : undefined} className={`flair flair-${f}`}>
+            {FLAIRS[f].emoji} {FLAIRS[f].label}
+          </Link>
+        ))}
+      </nav>
+      <TopicList
+        topics={topics}
+        me={me}
+        showCommunity={false}
+        empty={flair ? `No ${FLAIRS[flair].label.toLowerCase()} posts in ${c.label} yet.` : `Nothing in ${c.label} yet. Start the first topic.`}
+      />
+      <Pager base={`${c.path}${sortQuery(sort, window, extra)}`} page={page} hasMore={hasMore} />
     </>
   );
 }

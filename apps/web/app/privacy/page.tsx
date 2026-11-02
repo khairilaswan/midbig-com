@@ -59,7 +59,7 @@ export default function PrivacyPage() {
             <td>Security, rate limits, bot checks and fixing problems</td>
           </tr>
           <tr>
-            <td>Cookies that keep you logged in and remember your privacy choice</td>
+            <td>Cookies that keep you logged in and remember your privacy choice and the look you picked in Appearance</td>
             <td>Needed for the site to work</td>
           </tr>
         </tbody>

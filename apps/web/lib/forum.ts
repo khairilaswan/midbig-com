@@ -11,19 +11,25 @@ import {
   findDomains,
   FORUM_LIMITS,
   hotRank,
+  isFlair,
   isStance,
   isTrusted,
+  mediaUrl,
   MAX_DEPTH,
   reputation,
+  checkPoll,
   TOP_WINDOWS,
   topicPath,
   VOTE_LIMITS,
   voteDelta,
   voteProblem,
+  withoutQuotes,
   type AssetClass,
   type ChatRole,
   type CommunityKind,
   type FilterReason,
+  type Flair,
+  type MediaType,
   type Namespace,
   type ReportReason,
   type Stance,
@@ -35,8 +41,10 @@ import { getSession, turnstile } from "./auth";
 import { answerPostMentions } from "./bots";
 import { canModerate, getViewer, postBlock, verifyTurnstile, type Viewer } from "./chat";
 import { canModerateCommunity, getCommunityById, setMember, type Community } from "./communities";
+import { hidePostMedia, mediaUrls, ownPostMedia, showPostMedia } from "./media";
 import { pool, redis } from "./server";
 import { classEnabled, enabledClasses } from "./settings";
+import { insertPoll, notifyForPost, notifyMilestone } from "./social";
 import type { ForumAuthor, ForumMe, ForumPost, ForumQueueItem, Profile, TopicSummary } from "./types";
 
 type Status = "visible" | "held" | "removed";
@@ -48,7 +56,13 @@ interface AuthorCols {
   reputation: number;
   is_bot: boolean;
   verified: boolean;
+  avatar_id: string | null;
+  avatar_mime: MediaType | null;
 }
+
+/** The author columns every list selects, from "user" u. */
+const AUTHOR_COLS = `u.chat_name, u.role, u.reputation, u.is_bot, u.verified, u.avatar_id,
+  (SELECT am.mime FROM media am WHERE am.id = u.avatar_id AND am.status = 'visible') AS avatar_mime`;
 
 function author(r: AuthorCols): ForumAuthor {
   return {
@@ -57,6 +71,7 @@ function author(r: AuthorCols): ForumAuthor {
     badge: badgeFor(r.role, r.is_bot),
     reputation: r.reputation,
     verified: r.verified,
+    avatar: r.avatar_id && r.avatar_mime ? mediaUrl(r.avatar_id, r.avatar_mime) : null,
   };
 }
 
@@ -80,8 +95,15 @@ interface TopicRecord extends AuthorCols {
   reply_count: number;
   score: number;
   stance: Stance | null;
+  flair: Flair | null;
+  views: number;
+  cover_id: string | null;
+  cover_mime: MediaType | null;
+  has_poll: boolean;
+  saved: boolean;
   my_vote: number;
   first_post_id: string | null;
+  excerpt: string | null;
   last_post_at: Date;
   created_at: Date;
 }
@@ -89,8 +111,12 @@ interface TopicRecord extends AuthorCols {
 /** $1 is always the viewer's id ("" when logged out), for their vote. */
 const TOPIC_SELECT = `SELECT t.id::text, t.title, t.community_id::text, c.ns AS c_ns, c.slug AS c_slug, c.kind AS c_kind,
     c.asset_class AS c_class, c.title AS c_title, t.asset_id, upper(a.symbol) AS asset_symbol, t.status, t.pinned, t.locked,
-    t.reply_count, t.score, t.stance, t.last_post_at, t.created_at, t.user_id, u.chat_name, u.role, u.reputation, u.is_bot, u.verified,
-    f.id::text AS first_post_id, COALESCE(v.value, 0)::int AS my_vote
+    t.reply_count, t.score, t.stance, t.flair, t.views, t.cover_id,
+    (SELECT cm.mime FROM media cm WHERE cm.id = t.cover_id AND cm.status = 'visible') AS cover_mime,
+    EXISTS (SELECT 1 FROM polls pl WHERE pl.topic_id = t.id) AS has_poll,
+    EXISTS (SELECT 1 FROM saved_topics st WHERE st.topic_id = t.id AND st.user_id = $1) AS saved,
+    t.last_post_at, t.created_at, t.user_id, ${AUTHOR_COLS},
+    f.id::text AS first_post_id, CASE WHEN f.status = 'visible' THEN left(f.body, 320) END AS excerpt, COALESCE(v.value, 0)::int AS my_vote
   FROM forum_topics t
   JOIN communities c ON c.id = t.community_id
   JOIN "user" u ON u.id = t.user_id
@@ -112,7 +138,13 @@ function toTopic(r: TopicRecord): TopicSummary {
     score: r.score,
     myVote: (r.my_vote || 0) as VoteValue,
     firstPostId: r.first_post_id,
+    excerpt: r.excerpt ?? "",
     stance: r.stance,
+    flair: r.flair,
+    views: r.views,
+    cover: r.cover_id && r.cover_mime ? mediaUrl(r.cover_id, r.cover_mime) : null,
+    hasPoll: r.has_poll,
+    saved: r.saved,
     lastPostAt: r.last_post_at.getTime(),
     createdAt: r.created_at.getTime(),
     pinned: r.pinned,
@@ -123,14 +155,18 @@ function toTopic(r: TopicRecord): TopicSummary {
 
 /**
  * Visible topics in active communities whose category is on: in one
- * community, in a set of them (a member's feed), about one asset, or
- * everywhere. Sorted hot, new, or top over a window. Pinned topics lead a
- * single community's hot list.
+ * community, in a set of them (a member's feed), about one asset, by the
+ * people a member follows, saved by a member, or everywhere. Sorted hot,
+ * new, or top over a window, optionally with one flair. Pinned topics lead
+ * a single community's hot list. Topics by people the viewer muted are left out.
  */
 export async function listTopics(opts: {
   communityId?: string;
   communityIds?: string[];
   assetId?: string;
+  authorIds?: string[];
+  savedBy?: string;
+  flair?: Flair | null;
   sort?: TopicSort;
   window?: TopWindow;
   page?: number;
@@ -154,6 +190,10 @@ export async function listTopics(opts: {
        AND ($4::bigint[] IS NULL OR t.community_id = ANY($4))
        AND ($5::text IS NULL OR t.asset_id = $5)
        AND ($6::int IS NULL OR t.created_at > now() - $6 * interval '1 day')
+       AND ($9::text[] IS NULL OR t.user_id = ANY($9))
+       AND ($10::text IS NULL OR EXISTS (SELECT 1 FROM saved_topics s WHERE s.topic_id = t.id AND s.user_id = $10))
+       AND ($11::text IS NULL OR t.flair = $11)
+       AND NOT EXISTS (SELECT 1 FROM chat_mutes mu WHERE mu.user_id = $1 AND mu.muted_user_id = t.user_id)
      ORDER BY ${order} LIMIT $7 OFFSET $8`,
     [
       opts.viewerId ?? "",
@@ -164,6 +204,9 @@ export async function listTopics(opts: {
       days,
       limit + 1,
       (page - 1) * limit,
+      opts.authorIds ?? null,
+      opts.savedBy ?? null,
+      isFlair(opts.flair) ? opts.flair : null,
     ],
   );
   const rows = res.rows.map(toTopic);
@@ -187,18 +230,27 @@ interface PostRecord extends AuthorCols {
   depth: number;
   is_first: boolean;
   body: string;
+  images: string[];
   status: Status;
   score: number;
   created_at: Date;
   edited_at: Date | null;
   my_vote: number;
+  muted: boolean;
 }
 
-/** $2 is the viewer's id, for their vote. */
-const POST_SELECT = `SELECT p.id::text, p.topic_id::text, p.parent_id::text, p.depth, p.is_first, p.body, p.status, p.score,
-    p.created_at, p.edited_at, p.user_id, u.chat_name, u.role, u.reputation, u.is_bot, u.verified,
-    COALESCE((SELECT v.value FROM forum_votes v WHERE v.post_id = p.id AND v.user_id = $2), 0)::int AS my_vote
+/** $2 is the viewer's id, for their vote and their mutes. */
+const POST_SELECT = `SELECT p.id::text, p.topic_id::text, p.parent_id::text, p.depth, p.is_first, p.body, p.images, p.status, p.score,
+    p.created_at, p.edited_at, p.user_id, ${AUTHOR_COLS},
+    COALESCE((SELECT v.value FROM forum_votes v WHERE v.post_id = p.id AND v.user_id = $2), 0)::int AS my_vote,
+    EXISTS (SELECT 1 FROM chat_mutes mu WHERE mu.user_id = $2 AND mu.muted_user_id = p.user_id) AS muted
   FROM forum_posts p JOIN "user" u ON u.id = p.user_id`;
+
+/** Turns the posts' photo ids into URLs, dropping photos a moderator took down. */
+async function withImages<T extends ForumPost>(posts: T[]): Promise<T[]> {
+  const urls = await mediaUrls(posts.flatMap((p) => p.images));
+  return posts.map((p) => ({ ...p, images: p.images.map((id) => urls.get(id)).filter((u): u is string => u != null) }));
+}
 
 function toPost(r: PostRecord, viewer: Viewer | null, now = Date.now()): ForumPost {
   const mine = viewer?.id === r.user_id;
@@ -210,12 +262,14 @@ function toPost(r: PostRecord, viewer: Viewer | null, now = Date.now()): ForumPo
     isFirst: r.is_first,
     author: author(r),
     body: r.body,
+    images: r.images ?? [],
     createdAt: r.created_at.getTime(),
     editedAt: r.edited_at?.getTime() ?? null,
     score: r.score,
     myVote: (r.my_vote || 0) as VoteValue,
     status: r.status,
     mine,
+    muted: Boolean(r.muted) && !mine,
     canEdit: mine && r.status !== "removed" && now - r.created_at.getTime() < FORUM_LIMITS.editMs,
   };
 }
@@ -237,11 +291,15 @@ export async function getPosts(
     `${POST_SELECT} WHERE p.topic_id = $1 AND ${seen} ORDER BY p.is_first DESC, p.id LIMIT $4`,
     [topicId, viewer?.id ?? "", mod, FORUM_LIMITS.commentsMax + 1],
   );
-  const posts = res.rows.map((r) => {
-    const p = toPost(r, viewer);
-    // A placeholder for a removed comment keeps nothing of what it said.
-    return p.status === "removed" && !mod ? { ...p, body: "", author: { ...p.author, id: "", name: "[removed]" } } : p;
-  });
+  const posts = await withImages(
+    res.rows.map((r) => {
+      const p = toPost(r, viewer);
+      // A placeholder for a removed comment keeps nothing of what it said.
+      return p.status === "removed" && !mod
+        ? { ...p, body: "", images: [], author: { ...p.author, id: "", name: "[removed]", avatar: null } }
+        : p;
+    }),
+  );
   const first = posts[0]?.isFirst ? posts[0] : null;
   return { first, comments: posts.filter((p) => !p.isFirst) };
 }
@@ -264,7 +322,7 @@ export async function getProfile(name: string, viewer: Viewer | null): Promise<P
   const res = await pool().query<
     AuthorCols & { bio: string | null; createdAt: Date; topics: number; replies: number; score: number }
   >(
-    `SELECT u.id AS user_id, u.chat_name, u.role, u.reputation, u.is_bot, u.verified, u.bio, u."createdAt",
+    `SELECT u.id AS user_id, ${AUTHOR_COLS}, u.bio, u."createdAt",
        (SELECT count(*)::int FROM forum_topics t WHERE t.user_id = u.id AND t.status = 'visible') AS topics,
        (SELECT count(*)::int FROM forum_posts p WHERE p.user_id = u.id AND p.status = 'visible' AND NOT p.is_first) AS replies,
        (SELECT COALESCE(sum(p.score), 0)::int FROM forum_posts p WHERE p.user_id = u.id AND p.status = 'visible') AS score
@@ -287,18 +345,20 @@ export async function getProfile(name: string, viewer: Viewer | null): Promise<P
     topics: r.topics,
     replies: r.replies,
     scoreReceived: r.score,
-    recent: posts.rows.map((p) => ({
-      ...toPost(p, viewer),
-      topicTitle: p.title,
-      topicPath: topicPath(p.topic_id, p.title),
-    })),
+    recent: await withImages(
+      posts.rows.map((p) => ({
+        ...toPost(p, viewer),
+        topicTitle: p.title,
+        topicPath: topicPath(p.topic_id, p.title),
+      })),
+    ),
   };
 }
 
 export async function topMembers(limit = 10): Promise<ForumAuthor[]> {
   return (
     await pool().query<AuthorCols>(
-      `SELECT u.id AS user_id, u.chat_name, u.role, u.reputation, u.is_bot, u.verified FROM "user" u
+      `SELECT u.id AS user_id, ${AUTHOR_COLS} FROM "user" u
        WHERE u.reputation > 0 AND u.chat_name IS NOT NULL AND NOT u.is_bot
          AND NOT EXISTS (SELECT 1 FROM chat_bans b WHERE b.user_id = u.id AND (b.until IS NULL OR b.until > now()))
        ORDER BY u.reputation DESC, u."createdAt" LIMIT $1`,
@@ -425,7 +485,17 @@ async function postableCommunity(communityId: string): Promise<Community | strin
 
 export async function createTopic(
   viewer: Viewer | null,
-  input: { communityId: string; title: string; body: string; stance?: Stance | null; captcha?: string; ip: string | null },
+  input: {
+    communityId: string;
+    title: string;
+    body: string;
+    stance?: Stance | null;
+    flair?: Flair | null;
+    images?: unknown;
+    poll?: { options: unknown; hours: unknown } | null;
+    captcha?: string;
+    ip: string | null;
+  },
 ): Promise<WriteResult> {
   const c = await postableCommunity(String(input.communityId ?? ""));
   if (typeof c === "string") return { ok: false, error: c };
@@ -434,8 +504,15 @@ export async function createTopic(
   const titleCheck = checkMessage(t.title, { canPostLinks: false, isStaff: viewer?.isStaff, maxLength: FORUM_LIMITS.titleMax });
   if (titleCheck.action !== "allow") return { ok: false, error: "Keep links and contact details out of the title." };
   const stance = isStance(input.stance) ? input.stance : null;
+  const flair = isFlair(input.flair) ? input.flair : null;
+  const poll = input.poll ? checkPoll(input.poll.options, input.poll.hours) : null;
+  if (poll && "error" in poll) return { ok: false, error: poll.error };
+  if (poll && poll.options.some((o) => checkMessage(o, { canPostLinks: false, isStaff: viewer?.isStaff, maxLength: 60 }).action !== "allow")) {
+    return { ok: false, error: "Keep links and contact details out of poll options." };
+  }
   const p = await prepare(viewer, "topic", String(input.body ?? ""), input.captcha, input.ip);
   if (!p.ok) return p;
+  const images = await ownPostMedia(p.v.id, input.images);
 
   const client = await pool().connect();
   let id: string;
@@ -443,16 +520,18 @@ export async function createTopic(
   try {
     await client.query("BEGIN");
     const topic = await client.query<{ id: string }>(
-      `INSERT INTO forum_topics (community_id, asset_id, user_id, title, status, stance, hot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id::text`,
-      [c.id, c.assetId, p.v.id, t.title, p.held ? "held" : "visible", stance, hotRank(0, Date.now())],
+      `INSERT INTO forum_topics (community_id, asset_id, user_id, title, status, stance, flair, cover_id, hot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id::text`,
+      [c.id, c.assetId, p.v.id, t.title, p.held ? "held" : "visible", stance, flair, images[0] ?? null, hotRank(0, Date.now())],
     );
     id = topic.rows[0]!.id;
     const post = await client.query<{ id: string }>(
-      `INSERT INTO forum_posts (topic_id, user_id, is_first, body, status, held_by, flags) VALUES ($1, $2, true, $3, $4, $5, $6) RETURNING id::text`,
-      [id, p.v.id, p.body, p.held ? "held" : "visible", p.held ? "filter" : null, p.flags],
+      `INSERT INTO forum_posts (topic_id, user_id, is_first, body, images, status, held_by, flags)
+       VALUES ($1, $2, true, $3, $4, $5, $6, $7) RETURNING id::text`,
+      [id, p.v.id, p.body, images, p.held ? "held" : "visible", p.held ? "filter" : null, p.flags],
     );
     postId = post.rows[0]!.id;
+    if (poll) await insertPoll(client, id, poll.options, poll.hours);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -463,13 +542,18 @@ export async function createTopic(
   await syncTopics([id]);
   // Posting in a community joins it.
   await setMember(p.v, c.id, true).catch(() => null);
-  if (!p.held) void answerPostMentions({ postId, body: p.body, askerId: p.v.id });
+  if (!p.held) {
+    void answerPostMentions({ postId, body: withoutQuotes(p.body), askerId: p.v.id });
+    void notifyForPost({ id: postId, authorId: p.v.id, body: p.body, parentId: null, topicId: id, isFirst: true }).catch((err) =>
+      console.error("notify failed", err),
+    );
+  }
   return { ok: true, path: topicPath(id, t.title), held: p.held };
 }
 
 export async function createReply(
   viewer: Viewer | null,
-  input: { topicId: string; parentId?: string | null; body: string; captcha?: string; ip: string | null },
+  input: { topicId: string; parentId?: string | null; body: string; images?: unknown; captcha?: string; ip: string | null },
 ): Promise<WriteResult> {
   const topic = await getTopic(String(input.topicId), viewer);
   if (!topic || topic.status !== "visible") return { ok: false, error: "That topic is gone." };
@@ -498,14 +582,21 @@ export async function createReply(
   }
   const p = await prepare(viewer, "reply", String(input.body ?? ""), input.captcha, input.ip);
   if (!p.ok) return p;
+  const images = await ownPostMedia(p.v.id, input.images);
   const res = await pool().query<{ id: string }>(
-    `INSERT INTO forum_posts (topic_id, user_id, parent_id, depth, body, status, held_by, flags)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id::text`,
-    [topic.id, p.v.id, parentId, depth, p.body, p.held ? "held" : "visible", p.held ? "filter" : null, p.flags],
+    `INSERT INTO forum_posts (topic_id, user_id, parent_id, depth, body, images, status, held_by, flags)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id::text`,
+    [topic.id, p.v.id, parentId, depth, p.body, images, p.held ? "held" : "visible", p.held ? "filter" : null, p.flags],
   );
   const id = res.rows[0]!.id;
   await syncTopics([topic.id]);
-  if (!p.held) void answerPostMentions({ postId: id, body: p.body, askerId: p.v.id });
+  if (!p.held) {
+    void answerPostMentions({ postId: id, body: withoutQuotes(p.body), askerId: p.v.id });
+    // A reply that went beside its comment (past the deepest level) still tells the person it answered.
+    void notifyForPost({ id, authorId: p.v.id, body: p.body, parentId: input.parentId ? String(input.parentId) : null, topicId: topic.id, isFirst: false }).catch(
+      (err) => console.error("notify failed", err),
+    );
+  }
   return { ok: true, path: `${topic.path}#p${id}`, held: p.held };
 }
 
@@ -579,6 +670,7 @@ export async function deleteOwnPost(v: Viewer, postId: string): Promise<{ topicG
   );
   const row = res.rows[0];
   if (!row) return null;
+  await hidePostMedia([postId]);
   await syncTopics([row.topic_id]);
   await recomputeReputation([v.id]);
   return { topicGone: row.is_first };
@@ -612,6 +704,7 @@ export async function vote(v: Viewer, postId: string, value: VoteValue): Promise
 
   const client = await pool().connect();
   let topicId: string | null = null;
+  let upsAfter: number | null = null;
   try {
     await client.query("BEGIN");
     const prev = await client.query<{ value: number }>(
@@ -629,11 +722,12 @@ export async function vote(v: Viewer, postId: string, value: VoteValue): Promise
         );
       }
       const d = voteDelta(before, value);
-      const upd = await client.query<{ topic_id: string; is_first: boolean }>(
-        `UPDATE forum_posts SET ups = ups + $2, downs = downs + $3, score = score + $4 WHERE id = $1 RETURNING topic_id::text, is_first`,
+      const upd = await client.query<{ topic_id: string; is_first: boolean; ups: number }>(
+        `UPDATE forum_posts SET ups = ups + $2, downs = downs + $3, score = score + $4 WHERE id = $1 RETURNING topic_id::text, is_first, ups`,
         [postId, d.ups, d.downs, d.score],
       );
       if (upd.rows[0]?.is_first) topicId = upd.rows[0].topic_id;
+      if (upd.rows[0] && d.ups > 0) upsAfter = upd.rows[0].ups;
     }
     await client.query("COMMIT");
   } catch (err) {
@@ -644,6 +738,7 @@ export async function vote(v: Viewer, postId: string, value: VoteValue): Promise
   }
   if (topicId) await rankTopics([topicId]);
   if (!post.is_bot) await recomputeReputation([post.user_id]);
+  if (upsAfter != null && !post.is_bot) await notifyMilestone(postId, upsAfter - 1, upsAfter).catch(() => {});
   return null;
 }
 
@@ -726,7 +821,7 @@ export async function forumQueue(): Promise<ForumQueueItem[]> {
       author_posts: number;
     }
   >(
-    `${POST_SELECT.replace("$2", "''").replace(
+    `${POST_SELECT.replaceAll("$2", "''").replace(
       "FROM forum_posts p",
       `, t.title, c.ns || '/' || c.slug AS community_label, p.held_by, p.flags, u."createdAt" AS author_joined,
        (SELECT count(*)::int FROM forum_posts x WHERE x.user_id = p.user_id) AS author_posts,
@@ -737,7 +832,7 @@ export async function forumQueue(): Promise<ForumQueueItem[]> {
      WHERE p.status = 'held' OR (p.status = 'visible' AND p.report_count > 0 AND p.reviewed_at IS NULL)
      ORDER BY p.id LIMIT 200`,
   );
-  return res.rows.map((r) => ({
+  return withImages(res.rows.map((r) => ({
     ...toPost(r, null),
     topicTitle: r.title,
     topicPath: topicPath(r.topic_id, r.title),
@@ -747,7 +842,7 @@ export async function forumQueue(): Promise<ForumQueueItem[]> {
     reports: r.reports ?? [],
     authorJoined: r.author_joined.getTime(),
     authorPosts: r.author_posts,
-  }));
+  })));
 }
 
 export async function approvePosts(mod: Viewer, ids: string[]): Promise<void> {
@@ -756,6 +851,7 @@ export async function approvePosts(mod: Viewer, ids: string[]): Promise<void> {
      WHERE id = ANY($1::bigint[]) AND status <> 'removed' RETURNING topic_id::text, user_id`,
     [ids, mod.id],
   );
+  await showPostMedia(ids);
   await syncTopics(res.rows.map((r) => r.topic_id));
   await recomputeReputation(res.rows.map((r) => r.user_id));
 }
@@ -766,6 +862,7 @@ export async function removePosts(mod: Viewer, ids: string[]): Promise<void> {
      WHERE id = ANY($1::bigint[]) AND status <> 'removed' RETURNING topic_id::text, user_id`,
     [ids, mod.id],
   );
+  await hidePostMedia(ids);
   await syncTopics(res.rows.map((r) => r.topic_id));
   await recomputeReputation(res.rows.map((r) => r.user_id));
 }
@@ -786,11 +883,12 @@ export async function topicCommunity(topicId: string): Promise<string | null> {
 
 /** Part of a ban: removes what the person posted in the forum in the last day, like chat. */
 export async function removeRecentPosts(mod: Viewer, userId: string): Promise<void> {
-  const res = await pool().query<{ topic_id: string }>(
+  const res = await pool().query<{ id: string; topic_id: string }>(
     `UPDATE forum_posts SET status = 'removed', reviewed_at = now(), reviewed_by = $2
-     WHERE user_id = $1 AND status <> 'removed' AND created_at > now() - interval '1 day' RETURNING topic_id::text`,
+     WHERE user_id = $1 AND status <> 'removed' AND created_at > now() - interval '1 day' RETURNING id::text, topic_id::text`,
     [userId, mod.id],
   );
+  await hidePostMedia(res.rows.map((r) => r.id));
   await syncTopics(res.rows.map((r) => r.topic_id));
   await recomputeReputation([userId]);
 }

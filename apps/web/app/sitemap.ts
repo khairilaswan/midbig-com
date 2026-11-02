@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { listCommunities } from "@/lib/communities";
 import { sitemapTopics } from "@/lib/forum";
+import { siteLook } from "@/lib/look";
 import { enabledClasses } from "@/lib/settings";
 import { getAllAssetIds } from "@/lib/server";
 import { SITE_URL } from "@/lib/site";
@@ -10,16 +11,19 @@ export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [all, topics, communities, on] = await Promise.all([
+  const [all, topics, communities, on, look] = await Promise.all([
     getAllAssetIds(),
     sitemapTopics(),
     listCommunities({ sort: "active", limit: 5000 }),
     enabledClasses(),
+    siteLook(),
   ]);
   const assets = all.filter((a) => on.includes(assetClassOf(a.id)));
   return [
     { url: `${SITE_URL}/`, changeFrequency: "always", priority: 1 },
     ...(on.includes("crypto") ? [{ url: `${SITE_URL}/gainers-losers`, changeFrequency: "hourly" as const, priority: 0.8 }] : []),
+    // While the home page is a community template, the coin list lives at /coins.
+    ...(on.includes("crypto") && look.template !== "markets" ? [{ url: `${SITE_URL}/coins`, changeFrequency: "always" as const, priority: 0.9 }] : []),
     ...(assets.some((a) => a.id.startsWith("stock-"))
       ? [{ url: `${SITE_URL}/stocks`, changeFrequency: "always" as const, priority: 0.9 }]
       : []),

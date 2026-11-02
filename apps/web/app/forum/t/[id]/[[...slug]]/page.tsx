@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { assetPath, parseCommentSort, slugify, type CommentSort } from "@midbig/shared";
 import { CommentForm, CommentTree, PostView } from "@/components/forum";
-import { StanceTag } from "@/components/forum-list";
+import { FlairTag, StanceTag } from "@/components/forum-list";
 import { turnstile } from "@/lib/auth";
 import { canModerateCommunity, getCommunityById } from "@/lib/communities";
 import { forumViewer, getPosts, getTopic } from "@/lib/forum";
 import { classEnabled } from "@/lib/settings";
 import { SITE_URL } from "@/lib/site";
+import { countView, getPoll, reactionsFor } from "@/lib/social";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,12 @@ export default async function TopicPage({ params, searchParams }: Props) {
   if (!community || (community.status !== "active" && !me?.isSiteMod) || !(await classEnabled(community.assetClass))) notFound();
   const { first, comments } = await getPosts(topic.id, viewer, me?.canModerate ?? false);
   if (!first) notFound();
+  const h = await headers();
+  const [reactions, poll] = await Promise.all([
+    reactionsFor([first.id, ...comments.map((c) => c.id)], viewer?.id),
+    topic.hasPoll ? getPoll(topic.id, viewer?.id) : null,
+    topic.status === "visible" ? countView(topic.id, viewer?.id ?? h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null) : null,
+  ]);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -71,6 +79,7 @@ export default async function TopicPage({ params, searchParams }: Props) {
         {topic.pinned && <span className="badge">Pinned</span>} {topic.locked && <span aria-label="Locked">🔒</span>} {topic.title}
       </h1>
       <p className="muted small topic-sub">
+        <FlairTag flair={topic.flair} href={`${topic.community.path}?flair=${topic.flair}`} />
         <StanceTag stance={topic.stance} />
         {topic.assetId && topic.assetSymbol && (
           <Link href={assetPath(topic.assetId)}>
@@ -89,7 +98,11 @@ export default async function TopicPage({ params, searchParams }: Props) {
         post={first}
         me={me}
         title={topic.title}
-        topic={{ id: topic.id, pinned: topic.pinned, locked: topic.locked, communityPath: topic.community.path }}
+        topic={{ id: topic.id, pinned: topic.pinned, locked: topic.locked, communityPath: topic.community.path, path: topic.path }}
+        reactions={reactions[first.id] ?? []}
+        poll={poll}
+        saved={topic.saved}
+        views={topic.views}
       />
 
       <div className="comments-head" id="comments">
@@ -105,7 +118,7 @@ export default async function TopicPage({ params, searchParams }: Props) {
       {topic.status === "visible" && (
         <CommentForm topicId={topic.id} me={me} captchaSiteKey={captchaSiteKey} locked={topic.locked} />
       )}
-      <CommentTree comments={comments} me={me} topicId={topic.id} locked={topic.locked && !me?.canModerate} captchaSiteKey={captchaSiteKey} sort={sort} />
+      <CommentTree comments={comments} me={me} topicId={topic.id} locked={topic.locked && !me?.canModerate} captchaSiteKey={captchaSiteKey} sort={sort} reactions={reactions} />
       <p className="muted small">Posts are members&rsquo; opinions and bots&rsquo; automated replies, not financial advice.</p>
     </div>
   );

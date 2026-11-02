@@ -4,22 +4,43 @@
   --text: #0d1117;
   --muted: #59636e;
   --line: #e4e8ec;
-  --accent: #2f6fed;
+  /* The look's accent (set on <html> from packages/shared/src/themes.ts), tuned to stay readable as text. */
+  --accent: var(--accent-ink-light, #2f6fed);
+  /* Accent as a filled background (buttons, badges) and the text on it. */
+  --fill: var(--accent);
+  --on-fill: #ffffff;
   --up: #0a8a4a;
   --down: #d1242f;
   --delayed: #b26b00;
   --radius: 10px;
+  --card-bg: var(--surface);
+  --header-bg: var(--bg);
   color-scheme: light;
 }
 
+:root[data-mode="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --text: #e6edf3;
+  --muted: #8d96a0;
+  --line: #262c36;
+  --accent: var(--accent-ink-dark, #4c8dff);
+  --on-fill: #0d1117;
+  --up: #3fb950;
+  --down: #f85149;
+  --delayed: #d29922;
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-mode="auto"] {
     --bg: #0d1117;
     --surface: #161b22;
     --text: #e6edf3;
     --muted: #8d96a0;
     --line: #262c36;
-    --accent: #4c8dff;
+    --accent: var(--accent-ink-dark, #4c8dff);
+    --on-fill: #0d1117;
     --up: #3fb950;
     --down: #f85149;
     --delayed: #d29922;
@@ -410,9 +431,9 @@ table.market {
 }
 
 .pager a[aria-current="page"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--fill);
+  border-color: var(--fill);
+  color: var(--on-fill);
 }
 
 .split {
@@ -655,13 +676,13 @@ table.market {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
+  background: var(--fill);
+  color: var(--on-fill);
   font-weight: 700;
 }
 
 .avatar:hover {
-  color: #fff;
+  color: var(--on-fill);
   opacity: 0.9;
 }
 
@@ -672,16 +693,16 @@ table.market {
   gap: 6px;
   padding: 9px 16px;
   border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--fill);
+  background: var(--fill);
+  color: var(--on-fill);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
 
 .btn:hover {
-  color: #fff;
+  color: var(--on-fill);
   filter: brightness(1.08);
 }
 
@@ -1028,9 +1049,9 @@ table.market {
 }
 
 .preset.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--fill);
+  border-color: var(--fill);
+  color: var(--on-fill);
 }
 
 .custom {

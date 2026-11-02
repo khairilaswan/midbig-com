@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   buildTree,
   COLLAPSE_SCORE,
   FORUM_LIMITS,
   MAX_DEPTH,
+  quoteFor,
   REPORT_REASONS,
   type CommentSort,
+  type Flair,
   type ReportReason,
   type Stance,
 } from "@midbig/shared";
@@ -26,10 +28,12 @@ import {
   updatePost,
 } from "@/app/forum-actions";
 import type { WriteResult } from "@/lib/forum";
+import type { Poll, ReactionCount } from "@/lib/social";
 import type { ForumMe, ForumPost, PostBlock } from "@/lib/types";
 import { ChatNameForm } from "./chat";
 import { AuthorLine } from "./forum-list";
 import { PostText } from "./post-body";
+import { FlairPicker, Gallery, PhotoTray, PollEditor, PollView, Reactions, SaveButton, ShareButton, usePhotos } from "./social";
 import { Turnstile } from "./turnstile";
 import { VoteButtons } from "./votes";
 
@@ -106,6 +110,9 @@ export function TopicForm({
   const [body, setBody] = useState("");
   const [where, setWhere] = useState(community?.label ?? "");
   const [stance, setStance] = useState<Stance | null>(null);
+  const [flair, setFlair] = useState<Flair | null>(null);
+  const [poll, setPoll] = useState<{ options: string[]; hours: number } | null>(null);
+  const photos = usePhotos();
   const captcha = useCaptcha();
   const block = me ? me.block : { reason: "login" as const };
   if (block) return <BlockNotice block={block} what="start a topic" />;
@@ -126,6 +133,9 @@ export function TopicForm({
           title: String(f.get("title")),
           body,
           stance,
+          flair,
+          images: photos.ids,
+          poll,
           captcha: captcha.token ?? undefined,
         });
         captcha.onResult(r);
@@ -165,9 +175,14 @@ export function TopicForm({
           maxLength={FORUM_LIMITS.topicMax}
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Share your reasoning and sources. Tag assets like $BTC or $AAPL. Ask a bot with @pricebot $NVDA. Leave a blank line between paragraphs."
+          onPaste={photos.onPaste}
+          onDrop={photos.onDrop}
+          placeholder="Share your reasoning and sources. Tag assets like $BTC or $AAPL. Ask a bot with @pricebot $NVDA. Leave a blank line between paragraphs. **bold**, *italic*, > quote, ||spoiler||."
         />
       </label>
+      <PhotoTray photos={photos} />
+      <FlairPicker value={flair} onChange={setFlair} />
+      <PollEditor value={poll} onChange={setPoll} />
       <fieldset className="stance-pick">
         <legend className="small">Your call (optional; feeds the community&rsquo;s bull/bear gauge)</legend>
         {(["bull", "bear"] as const).map((s) => (
@@ -193,7 +208,7 @@ export function TopicForm({
         </p>
       )}
       <p>
-        <button className="btn" disabled={busy || captcha.blocked}>
+        <button className="btn" disabled={busy || photos.busy || captcha.blocked}>
           {busy ? "Posting…" : "Post topic"}
         </button>
       </p>
@@ -209,6 +224,7 @@ export function CommentForm({
   locked,
   onDone,
   autoFocus = false,
+  initial = "",
 }: {
   topicId: string;
   /** The comment answered; null for a top-level comment. */
@@ -218,9 +234,32 @@ export function CommentForm({
   locked: boolean;
   onDone?: () => void;
   autoFocus?: boolean;
+  /** Text to start with, such as a quote of the comment answered. */
+  initial?: string;
 }) {
   const router = useRouter();
-  const [body, setBody] = useState("");
+  const draftKey = `draft:${topicId}:${parentId ?? "top"}`;
+  const [body, setBody] = useState(initial);
+  const photos = usePhotos();
+  // Keep an unsent comment in this browser, so a refresh or a wrong tap doesn't lose it.
+  useEffect(() => {
+    if (initial) return;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) setBody(saved);
+    } catch {
+      // Storage blocked: no drafts.
+    }
+  }, [draftKey, initial]);
+  const keep = (text: string) => {
+    setBody(text);
+    try {
+      if (text.trim()) localStorage.setItem(draftKey, text);
+      else localStorage.removeItem(draftKey);
+    } catch {
+      // Storage blocked: no drafts.
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -237,11 +276,12 @@ export function CommentForm({
         setBusy(true);
         setError("");
         setNote("");
-        const r = await postReply({ topicId, parentId, body, captcha: captcha.token ?? undefined });
+        const r = await postReply({ topicId, parentId, body, images: photos.ids, captcha: captcha.token ?? undefined });
         captcha.onResult(r);
         setBusy(false);
         if (!r.ok) return setError(r.error);
-        setBody("");
+        keep("");
+        photos.clear();
         if (r.held) setNote("Your comment is waiting for a moderator. Only you can see it until then.");
         onDone?.();
         router.refresh();
@@ -257,9 +297,12 @@ export function CommentForm({
         autoFocus={autoFocus}
         maxLength={FORUM_LIMITS.replyMax}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder={parentId ? "Write a reply…" : "What do you think? Tag $TICKERS, or ask @pricebot, @riskbot or @pulsebot."}
+        onChange={(e) => keep(e.target.value)}
+        onPaste={photos.onPaste}
+        onDrop={photos.onDrop}
+        placeholder={parentId ? "Write a reply…" : "What do you think? Tag $TICKERS, or ask @pricebot, @riskbot or @pulsebot. Paste a chart to add it."}
       />
+      <PhotoTray photos={photos} />
       {captcha.widget(captchaSiteKey)}
       {error && (
         <p className="form-error" role="alert">
@@ -272,7 +315,7 @@ export function CommentForm({
         </p>
       )}
       <p className="row-gap">
-        <button className="btn small" disabled={busy || !body.trim() || captcha.blocked}>
+        <button className="btn small" disabled={busy || photos.busy || !body.trim() || captcha.blocked}>
           {busy ? "Posting…" : parentId ? "Reply" : "Comment"}
         </button>
         {onDone && (
@@ -402,11 +445,19 @@ export function PostView({
   me,
   title,
   topic,
+  reactions,
+  poll,
+  saved,
+  views,
 }: {
   post: ForumPost;
   me: ForumMe | null;
   title: string;
-  topic: { id: string; pinned: boolean; locked: boolean; communityPath: string };
+  topic: { id: string; pinned: boolean; locked: boolean; communityPath: string; path: string };
+  reactions: ReactionCount[];
+  poll: Poll | null;
+  saved: boolean;
+  views: number;
 }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
@@ -420,12 +471,20 @@ export function PostView({
         </span>
       </div>
       {editing ? <EditForm post={post} title={title} onDone={() => setEditing(false)} /> : <PostText text={post.body} />}
+      <Gallery images={post.images} />
+      {poll && <PollView topicId={topic.id} poll={poll} signedIn={me != null} />}
       <HeldNote post={post} />
+      <Reactions postId={post.id} initial={reactions} signedIn={me != null} mine={post.mine} />
       <div className="post-actions small">
         <VoteButtons postId={post.id} score={post.score} myVote={post.myVote} me={me} mine={post.mine} />
         <a href="#comments" className="btn link small">
           💬 Comment
         </a>
+        <SaveButton topicId={topic.id} saved={saved} signedIn={me != null} />
+        <ShareButton path={topic.path} title={title} />
+        <span className="muted" title="Views">
+          👁 {views.toLocaleString("en-US")}
+        </span>
         {me && <PostMenu post={post} me={me} topic={topic} onEdit={() => setEditing(true)} onNote={setNote} />}
         {note && (
           <span className="muted" role="status">
@@ -447,6 +506,7 @@ export function CommentTree({
   locked,
   captchaSiteKey,
   sort,
+  reactions,
 }: {
   comments: ForumPost[];
   me: ForumMe | null;
@@ -454,13 +514,14 @@ export function CommentTree({
   locked: boolean;
   captchaSiteKey: string | null;
   sort: CommentSort;
+  reactions: Record<string, ReactionCount[]>;
 }) {
   const tree = buildTree(comments, sort) as Node[];
   if (tree.length === 0) return <p className="muted">No comments yet. Be the first.</p>;
   return (
     <ol className="comments">
       {tree.map((n) => (
-        <Comment key={n.id} node={n} me={me} topicId={topicId} locked={locked} captchaSiteKey={captchaSiteKey} />
+        <Comment key={n.id} node={n} me={me} topicId={topicId} locked={locked} captchaSiteKey={captchaSiteKey} reactions={reactions} />
       ))}
     </ol>
   );
@@ -476,16 +537,18 @@ function Comment({
   topicId,
   locked,
   captchaSiteKey,
+  reactions,
 }: {
   node: Node;
   me: ForumMe | null;
   topicId: string;
   locked: boolean;
   captchaSiteKey: string | null;
+  reactions: Record<string, ReactionCount[]>;
 }) {
   const sunk = node.score <= COLLAPSE_SCORE;
-  const [open, setOpen] = useState(!sunk);
-  const [replying, setReplying] = useState(false);
+  const [open, setOpen] = useState(!sunk && !node.muted);
+  const [replying, setReplying] = useState<false | "reply" | "quote">(false);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const placeholder = node.status === "removed" && !node.body;
@@ -502,7 +565,7 @@ function Comment({
         </span>
         {!open && (
           <span className="muted">
-            {sunk ? `folded: ${node.score} points` : "folded"}
+            {node.muted ? "someone you muted" : sunk ? `folded: ${node.score} points` : "folded"}
             {countAll(node) > 0 ? ` · ${countAll(node)} more` : ""}
           </span>
         )}
@@ -516,15 +579,22 @@ function Comment({
           ) : (
             <PostText text={node.body} />
           )}
+          {!editing && <Gallery images={node.images} />}
           <HeldNote post={node} />
           {!placeholder && (
             <div className="post-actions small">
               <VoteButtons postId={node.id} score={node.score} myVote={node.myVote} me={me} mine={node.mine} compact />
               {node.status === "visible" && !locked && (
-                <button type="button" className="btn link small" onClick={() => setReplying((r) => !r)}>
-                  Reply
-                </button>
+                <>
+                  <button type="button" className="btn link small" onClick={() => setReplying((r) => (r === "reply" ? false : "reply"))}>
+                    Reply
+                  </button>
+                  <button type="button" className="btn link small" onClick={() => setReplying((r) => (r === "quote" ? false : "quote"))}>
+                    Quote
+                  </button>
+                </>
               )}
+              <Reactions postId={node.id} initial={reactions[node.id] ?? []} signedIn={me != null} mine={node.mine} />
               {me && <PostMenu post={node} me={me} onEdit={() => setEditing(true)} onNote={setNote} />}
               {note && (
                 <span className="muted" role="status">
@@ -535,19 +605,21 @@ function Comment({
           )}
           {replying && (
             <CommentForm
+              key={replying}
               topicId={topicId}
               parentId={node.id}
               me={me}
               captchaSiteKey={captchaSiteKey}
               locked={locked}
               autoFocus
+              initial={replying === "quote" ? quoteFor(node.author.name, node.body, node.author.badge !== "bot") : ""}
               onDone={() => setReplying(false)}
             />
           )}
           {node.children.length > 0 && (
             <ol className={`comments${node.depth + 1 >= MAX_DEPTH - 1 ? " flat" : ""}`}>
               {node.children.map((c) => (
-                <Comment key={c.id} node={c} me={me} topicId={topicId} locked={locked} captchaSiteKey={captchaSiteKey} />
+                <Comment key={c.id} node={c} me={me} topicId={topicId} locked={locked} captchaSiteKey={captchaSiteKey} reactions={reactions} />
               ))}
             </ol>
           )}
