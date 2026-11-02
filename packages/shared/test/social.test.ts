@@ -49,7 +49,7 @@ test("looks round-trip and fix bad parts", () => {
   assert.equal(parseLook("nope.red"), null);
   assert.equal(parseLook(""), null);
   assert.equal(parseLook("glass").color, "red");
-  assert.equal(normalizeLook({ template: "x" }).template, "markets");
+  assert.equal(normalizeLook({ template: "x" }).template, "hub");
 });
 
 test("accent text stays readable", () => {

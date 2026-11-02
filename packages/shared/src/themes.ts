@@ -177,7 +177,7 @@ export interface Look {
   template: TemplateId;
 }
 
-export const DEFAULT_LOOK: Look = { style: "classic", color: "blue", mode: "auto", template: "markets" };
+export const DEFAULT_LOOK: Look = { style: "classic", color: "blue", mode: "auto", template: "hub" };
 
 /** Fixes a look so every part is valid together: a known style, one of its colors and modes, a known template. */
 export function normalizeLook(raw: Partial<Record<keyof Look, unknown>> | null | undefined, base: Look = DEFAULT_LOOK): Look {

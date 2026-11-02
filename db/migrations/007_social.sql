@@ -29,7 +29,7 @@ ALTER TABLE "user" ADD COLUMN banner_id text REFERENCES media (id) ON DELETE SET
 -- Empty means the site default (site_settings 'look').
 ALTER TABLE "user" ADD COLUMN look jsonb NOT NULL DEFAULT '{}';
 --;;
-INSERT INTO site_settings (key, value) VALUES ('look', '{"style": "classic", "color": "blue", "mode": "auto", "template": "markets"}')
+INSERT INTO site_settings (key, value) VALUES ('look', '{"style": "classic", "color": "blue", "mode": "auto", "template": "hub"}')
 ON CONFLICT DO NOTHING;
 --;;
 -- Up to four photos on a post or comment, in order.
