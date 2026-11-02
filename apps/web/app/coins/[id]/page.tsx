@@ -48,7 +48,7 @@ export default async function CoinPage({ params }: Props) {
   return (
     <article className="coin">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link href="/">Coins</Link> <span aria-hidden>›</span> <span>{asset.name}</span>
+        <Link href="/coins">Coins</Link> <span aria-hidden>›</span> <span>{asset.name}</span>
       </nav>
       <CoinHeader asset={asset} />
       <div className="coin-actions">

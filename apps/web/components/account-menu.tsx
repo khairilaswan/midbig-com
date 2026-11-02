@@ -1,12 +1,9 @@
-"use client";
-
 import Link from "next/link";
-import { authClient } from "@/lib/auth-client";
+import { Avatar } from "./avatar";
 
-export function AccountMenu() {
-  const { data, isPending } = authClient.useSession();
-  if (isPending) return <div className="account-menu" aria-hidden />;
-  if (!data) {
+/** The header's right side: log in, or the bell and the member's photo. */
+export function AccountMenu({ me }: { me: { name: string; email: string; avatar: string | null; unread: number } | null }) {
+  if (!me) {
     return (
       <div className="account-menu">
         <Link href="/login">Log in</Link>
@@ -16,12 +13,14 @@ export function AccountMenu() {
       </div>
     );
   }
-  const initial = (data.user.name || data.user.email).trim().charAt(0).toUpperCase();
   return (
     <div className="account-menu">
       <Link href="/alerts">Alerts</Link>
-      <Link href="/account" className="avatar" title={data.user.email} aria-label="Your account">
-        {initial}
+      <Link href="/notifications" className="bell" aria-label={me.unread ? `Notifications, ${me.unread} new` : "Notifications"}>
+        🔔{me.unread > 0 && <span className="bell-count">{me.unread > 9 ? "9+" : me.unread}</span>}
+      </Link>
+      <Link href="/account" className="avatar-link" title={me.email} aria-label="Your account">
+        <Avatar name={me.name} src={me.avatar} size={32} />
       </Link>
     </div>
   );

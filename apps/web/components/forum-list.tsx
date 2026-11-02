@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { assetPath, profilePath, repLevel, TOP_WINDOWS, type TopicSort, type TopWindow } from "@midbig/shared";
+import { assetPath, FLAIRS, profilePath, repLevel, TOP_WINDOWS, type Flair, type TopicSort, type TopWindow } from "@midbig/shared";
 import type { ForumAuthor, ForumMe, TopicSummary } from "@/lib/types";
+import { Avatar } from "./avatar";
+import { SaveButton, ShareButton } from "./social";
 import { VoteButtons } from "./votes";
 
 function ago(ms: number): string {
@@ -14,12 +16,13 @@ function ago(ms: number): string {
 
 const BADGES = { admin: "Admin", mod: "Mod", bot: "Bot" } as const;
 
-export function AuthorLine({ author }: { author: ForumAuthor }) {
+export function AuthorLine({ author, avatar = 20 }: { author: ForumAuthor; avatar?: number | false }) {
   const level = repLevel(author.reputation);
   if (!author.id) return <span className="author muted">{author.name}</span>;
   return (
     <span className="author">
       <Link href={profilePath(author.name)} className="chat-name">
+        {avatar !== false && <Avatar name={author.name} src={author.avatar} size={avatar} />}
         {author.name}
       </Link>
       {author.verified && author.badge !== "bot" && (
@@ -40,6 +43,80 @@ export function AuthorLine({ author }: { author: ForumAuthor }) {
 export function StanceTag({ stance }: { stance: "bull" | "bear" | null }) {
   if (!stance) return null;
   return <span className={`stance ${stance}`}>{stance === "bull" ? "▲ Bullish" : "▼ Bearish"}</span>;
+}
+
+export function FlairTag({ flair, href }: { flair: Flair | null; href?: string }) {
+  if (!flair) return null;
+  const f = FLAIRS[flair];
+  const inner = (
+    <>
+      {f.emoji} {f.label}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={`flair flair-${flair}`}>
+      {inner}
+    </Link>
+  ) : (
+    <span className={`flair flair-${flair}`}>{inner}</span>
+  );
+}
+
+/** The start of a post as plain text: formatting marks gone, spoilers hidden, cut at a word. */
+function plainExcerpt(text: string): string {
+  const plain = text
+    .replace(/\|\|[^|\n]*\|\|/g, "[spoiler]")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/\*\*|~~|`/g, "");
+  return text.length >= 320 ? `${plain.replace(/\s+\S*$/, "")}…` : plain;
+}
+
+function compact(n: number): string {
+  return n < 1000 ? String(n) : n.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 });
+}
+
+/** A post as a card in the social feed: author, title, the start of the text, its first photo and actions. */
+export function FeedCard({ topic: t, me }: { topic: TopicSummary; me: ForumMe | null }) {
+  return (
+    <article className="feed-card">
+      <header className="feed-head small">
+        <AuthorLine author={t.author} avatar={36} />
+        <span className="muted">
+          in{" "}
+          <Link href={t.community.path} className="community-tag">
+            {t.community.label}
+          </Link>{" "}
+          · {ago(t.createdAt)}
+        </span>
+      </header>
+      <Link href={t.path} className="feed-title">
+        {t.title}
+      </Link>
+      <div className="topic-sub small">
+        <FlairTag flair={t.flair} />
+        <StanceTag stance={t.stance} />
+        {t.hasPoll && <span className="flair">🗳️ Poll</span>}
+      </div>
+      {t.excerpt && <p className="feed-excerpt">{plainExcerpt(t.excerpt)}</p>}
+      {t.cover && (
+        <Link href={t.path} className="feed-cover">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.cover} alt="" loading="lazy" decoding="async" />
+        </Link>
+      )}
+      <footer className="post-actions small">
+        {t.firstPostId && <VoteButtons postId={t.firstPostId} score={t.score} myVote={t.myVote} me={me} mine={me?.id === t.author.id} compact />}
+        <Link href={`${t.path}#comments`} className="btn link small">
+          💬 {t.replies}
+        </Link>
+        <span className="muted" title="Views">
+          👁 {compact(t.views)}
+        </span>
+        <SaveButton topicId={t.id} saved={t.saved} signedIn={me != null} />
+        <ShareButton path={t.path} title={t.title} />
+      </footer>
+    </article>
+  );
 }
 
 export function TopicList({
@@ -64,8 +141,10 @@ export function TopicList({
           <div className="topic-main">
             <Link href={t.path} className="topic-title">
               {t.pinned && <span className="badge">Pinned</span>} {t.locked && <span aria-label="Locked">🔒</span>} {t.title}
+              {t.hasPoll && <span title="Has a poll"> 🗳️</span>}
             </Link>
             <div className="muted small topic-sub">
+              <FlairTag flair={t.flair} />
               {showCommunity && (
                 <Link href={t.community.path} className="community-tag">
                   {t.community.label}
@@ -79,10 +158,17 @@ export function TopicList({
               <span>{ago(t.createdAt)}</span>
             </div>
           </div>
+          {t.cover && (
+            <Link href={t.path} className="topic-thumb" tabIndex={-1} aria-hidden>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={t.cover} alt="" loading="lazy" decoding="async" />
+            </Link>
+          )}
           <div className="topic-stats small muted">
             <Link href={`${t.path}#comments`} title="Comments">
               💬 {t.replies}
             </Link>
+            <span title="Views">👁 {compact(t.views)}</span>
             <span title="Latest activity">{ago(t.lastPostAt)}</span>
           </div>
         </li>

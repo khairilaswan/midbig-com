@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { profilePath, repLevel } from "@midbig/shared";
+import { mediaUrl, profilePath, repLevel, type MediaType } from "@midbig/shared";
 import { ChangePasswordForm, ChatNameSetting, DeleteAccountForm, SignOutButton } from "@/components/account-settings";
 import { BioSetting } from "@/components/forum";
 import { PushToggle } from "@/components/push-toggle";
+import { ProfilePhotoSetting } from "@/components/social";
 import { TwoFactorSettings } from "@/components/two-factor";
 import { requireSession } from "@/lib/auth";
 import { getViewer } from "@/lib/chat";
@@ -19,9 +20,17 @@ export default async function AccountPage() {
     pool().query<{ providerId: string }>(`SELECT "providerId" FROM "account" WHERE "userId" = $1`, [user.id]),
     vapidKeys().catch(() => null),
     getViewer(user.id),
-    pool().query<{ bio: string | null }>(`SELECT bio FROM "user" WHERE id = $1`, [user.id]),
+    pool().query<{ bio: string | null; avatar_id: string | null; avatar_mime: MediaType | null; banner_id: string | null; banner_mime: MediaType | null }>(
+      `SELECT bio, avatar_id, (SELECT mime FROM media WHERE id = avatar_id) AS avatar_mime,
+         banner_id, (SELECT mime FROM media WHERE id = banner_id) AS banner_mime
+       FROM "user" WHERE id = $1`,
+      [user.id],
+    ),
   ]);
   const hasPassword = accounts.rows.some((a) => a.providerId === "credential");
+  const me = bio.rows[0];
+  const avatar = me?.avatar_id && me.avatar_mime ? mediaUrl(me.avatar_id, me.avatar_mime) : null;
+  const banner = me?.banner_id && me.banner_mime ? mediaUrl(me.banner_id, me.banner_mime) : null;
 
   return (
     <div className="narrow">
@@ -51,9 +60,30 @@ export default async function AccountPage() {
               Shown in chat and the forum. Reputation {viewer.reputation} ({repLevel(viewer.reputation)}) ·{" "}
               <Link href={profilePath(viewer.chatName)}>See your profile</Link>
             </p>
-            <BioSetting current={bio.rows[0]?.bio ?? null} />
+            <BioSetting current={me?.bio ?? null} />
+            <h3>Profile photo</h3>
+            <ProfilePhotoSetting kind="avatar" current={avatar} name={viewer.chatName} />
+            <h3>Banner</h3>
+            <p className="muted small">A wide picture across the top of your profile (shown at 3:1).</p>
+            <ProfilePhotoSetting kind="banner" current={banner} name={viewer.chatName} />
+            <p className="muted small">
+              Photos are public. No faces of other people without their OK, and nothing from the{" "}
+              <Link href="/rules">community rules</Link>&rsquo; banned list.
+            </p>
           </>
         )}
+      </section>
+
+      <section className="panel">
+        <h2>Appearance</h2>
+        <p className="muted">Theme style, color, light or dark, and your home page template.</p>
+        <p className="row-gap">
+          <Link href="/settings/appearance" className="btn secondary">
+            Change appearance
+          </Link>
+          <Link href="/forum?feed=saved">🔖 Saved posts</Link>
+          <Link href="/notifications">🔔 Notifications</Link>
+        </p>
       </section>
 
       <section className="panel">

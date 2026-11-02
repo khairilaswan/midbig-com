@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createBot, isAdmin, setCategories, setVerified, updateBot, type BotInput } from "@/lib/admin";
+import { createBot, isAdmin, removeProfilePhotos, setCategories, setVerified, updateBot, type BotInput } from "@/lib/admin";
 import { getSession } from "@/lib/auth";
 import { getViewer, type Viewer } from "@/lib/chat";
 import { createDefaults, setCommunityMod, setCommunityStatus } from "@/lib/communities";
@@ -62,6 +62,10 @@ export async function adminCommunityMod(id: string, who: string, mod: boolean): 
 
 export async function adminVerify(userId: string, verified: boolean): Promise<ActionResult> {
   return attempt(async () => setVerified(await admin(), String(userId), Boolean(verified)));
+}
+
+export async function adminRemovePhotos(userId: string): Promise<ActionResult> {
+  return attempt(async () => removeProfilePhotos(await admin(), String(userId)), "/admin/users");
 }
 
 export async function adminCreateBot(input: BotInput): Promise<ActionResult> {

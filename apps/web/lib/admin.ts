@@ -4,6 +4,7 @@ import { CHAT_NAME_RULE, cleanBody, isBotKind, type AssetClass, type BotKind, ty
 import { type Viewer } from "./chat";
 import { forgetBots } from "./bots";
 import { logAction } from "./communities";
+import { clearProfileMedia } from "./media";
 import { pool, uncache } from "./server";
 import { categories, type Categories } from "./settings";
 
@@ -101,6 +102,7 @@ export interface AdminUser {
   banned: boolean;
   posts: number;
   communities: number;
+  hasPhoto: boolean;
 }
 
 /** Members by email or public name (start of either), newest first when no search. */
@@ -118,8 +120,10 @@ export async function searchUsers(q: string): Promise<AdminUser[]> {
     banned: boolean;
     posts: number;
     communities: number;
+    has_photo: boolean;
   }>(
     `SELECT u.id, u.email, u.chat_name, u.role, u.verified, u.reputation, u."createdAt",
+       (u.avatar_id IS NOT NULL OR u.banner_id IS NOT NULL) AS has_photo,
        EXISTS (SELECT 1 FROM chat_bans b WHERE b.user_id = u.id AND (b.until IS NULL OR b.until > now())) AS banned,
        (SELECT count(*)::int FROM forum_posts p WHERE p.user_id = u.id) AS posts,
        (SELECT count(*)::int FROM communities c WHERE c.created_by = u.id) AS communities
@@ -139,7 +143,15 @@ export async function searchUsers(q: string): Promise<AdminUser[]> {
     banned: r.banned,
     posts: r.posts,
     communities: r.communities,
+    hasPhoto: r.has_photo,
   }));
+}
+
+/** Takes down a member's profile photo and banner, e.g. after a report. */
+export async function removeProfilePhotos(admin: Viewer, userId: string): Promise<void> {
+  await clearProfileMedia(userId, "avatar");
+  await clearProfileMedia(userId, "banner");
+  await logAction(admin, "member.photos_removed", userId);
 }
 
 export async function setVerified(admin: Viewer, userId: string, verified: boolean): Promise<string | null> {

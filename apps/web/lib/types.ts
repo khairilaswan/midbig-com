@@ -1,4 +1,4 @@
-import type { AssetClass, ChatBadge, ChatMessage, FilterReason, LivePrice, ReportReason, Stance, VoteValue } from "@midbig/shared";
+import type { AssetClass, ChatBadge, ChatMessage, FilterReason, Flair, LivePrice, ReportReason, Stance, VoteValue } from "@midbig/shared";
 
 /** One asset as the market tables need it. Serialisable, so it can go to client components. */
 export interface AssetRow {
@@ -69,6 +69,8 @@ export interface ForumAuthor {
   badge: ChatBadge;
   reputation: number;
   verified: boolean;
+  /** Profile photo URL, or null for the initial. */
+  avatar: string | null;
 }
 
 export interface TopicSummary {
@@ -86,7 +88,17 @@ export interface TopicSummary {
   /** The viewer's vote on the opening post. */
   myVote: VoteValue;
   firstPostId: string | null;
+  /** The start of the opening post, for feed cards. */
+  excerpt: string;
   stance: Stance | null;
+  flair: Flair | null;
+  /** Readers, counted once an hour each. */
+  views: number;
+  /** The opening post's first photo. */
+  cover: string | null;
+  hasPoll: boolean;
+  /** The viewer saved it. */
+  saved: boolean;
   lastPostAt: number;
   createdAt: number;
   pinned: boolean;
@@ -103,12 +115,16 @@ export interface ForumPost {
   isFirst: boolean;
   author: ForumAuthor;
   body: string;
+  /** Photo URLs, in order. */
+  images: string[];
   createdAt: number;
   editedAt: number | null;
   score: number;
   myVote: VoteValue;
   status: "visible" | "held" | "removed";
   mine: boolean;
+  /** Written by someone the viewer muted: shown folded. */
+  muted: boolean;
   /** The author's own post, still in its first hour. */
   canEdit: boolean;
 }
