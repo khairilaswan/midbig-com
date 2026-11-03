@@ -78,9 +78,10 @@ h2 {
 }
 
 .wrap {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 16px;
+  /* Pages use the whole window width, with a little breathing room at the edges. */
+  width: 100%;
+  margin: 0;
+  padding: 0 clamp(16px, 2vw, 32px);
 }
 
 .muted {

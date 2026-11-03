@@ -5,7 +5,7 @@ import { PRICES_KEY, type AssetClass, type LivePrice } from "@midbig/shared";
 import type { AssetDetail, AssetRow } from "./types";
 
 // Reuse connections across hot reloads in dev and across requests in prod.
-const g = globalThis as unknown as { __pool?: pg.Pool; __redis?: Redis };
+const g = globalThis as unknown as { __pool?: pg.Pool; __redis?: Redis; __cache?: Map<string, { at: number; value: unknown }> };
 
 export function pool(): pg.Pool {
   g.__pool ??= new pg.Pool({
@@ -25,8 +25,12 @@ export function redis(): Redis {
 
 export const PAGE_SIZE = 100;
 
-/** Tiny in-process cache so crawler bursts don't turn into one query per hit. */
-const cache = new Map<string, { at: number; value: unknown }>();
+/**
+ * Tiny in-process cache so crawler bursts don't turn into one query per hit.
+ * Kept on globalThis so pages and server actions, which Next may bundle
+ * separately, share it and an uncache() after a save shows at once.
+ */
+const cache = (g.__cache ??= new Map());
 export async function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;

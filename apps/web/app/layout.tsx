@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { lookVars, mediaUrl, type MediaType } from "@midbig/shared";
 import { AccountMenu } from "@/components/account-menu";
+import { HoverCards } from "@/components/hover-cards";
 import { LiveConnection } from "@/components/live";
 import { CookieBanner } from "@/components/privacy";
 import { RegisterServiceWorker } from "@/components/register-sw";
@@ -127,6 +128,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <p className="muted">© {new Date().getFullYear()} midbig.com</p>
           </div>
         </footer>
+        <HoverCards />
         <CookieBanner />
       </body>
     </html>
