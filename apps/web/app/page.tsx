@@ -7,7 +7,7 @@ import { getSession } from "@/lib/auth";
 import { joinedCommunities, listCommunities } from "@/lib/communities";
 import { forumViewer, listTopics } from "@/lib/forum";
 import { BLOCK_TEMPLATES, needs, type BlockTemplate, type TemplateLayout } from "@/lib/home-layout";
-import { homeLayouts } from "@/lib/home-layout-store";
+import { layoutEditing, viewerHomeLayout } from "@/lib/home-layout-store";
 import { currentLook } from "@/lib/look";
 import { getMarketPage, getMovers } from "@/lib/server";
 import { categories, type Categories } from "@/lib/settings";
@@ -41,8 +41,20 @@ export default async function Home({ searchParams }: Props) {
     if (!on.crypto) return page > 1 ? notFound() : <CryptoOff stocks={on.stock} forex={on.forex} />;
     return <CoinMarket page={page} base="/" />;
   }
-  const layout = (await homeLayouts())[template];
-  return <HomeTemplate template={template} layout={layout} data={await homeData(on, layout)} />;
+  const userId = session?.user.id ?? null;
+  const [layout, editing] = await Promise.all([viewerHomeLayout(userId, template), layoutEditing()]);
+  return (
+    <>
+      {editing.members && (
+        <p className="customize-link">
+          <Link href={userId ? `/customize?template=${template}` : "/signup?next=/customize"} className="btn secondary small">
+            ✎ Customize
+          </Link>
+        </p>
+      )}
+      <HomeTemplate template={template} layout={layout} data={await homeData(on, layout)} />
+    </>
+  );
 }
 
 /** Loads only what the layout's blocks show, and only as many rows as they ask for. */

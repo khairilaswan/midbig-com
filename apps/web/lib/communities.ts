@@ -46,6 +46,10 @@ export interface Community {
   topicCount: number;
   lastPostAt: number | null;
   createdAt: number;
+  /** Who made it, or null for midbig's own. */
+  createdBy: string | null;
+  /** The creator's arrangement of the page, as saved; see communityLayout(). */
+  layout: unknown;
 }
 
 interface CommunityRecord {
@@ -66,10 +70,13 @@ interface CommunityRecord {
   topic_count: number;
   last_post_at: Date | null;
   created_at: Date;
+  created_by: string | null;
+  layout: unknown;
 }
 
 const SELECT = `SELECT c.id::text, c.ns, c.slug, c.kind, c.asset_id, c.asset_class, c.title, c.symbol, a.image_url,
-    c.description, c.rules, c.token_info, c.status, c.member_count, c.topic_count, c.last_post_at, c.created_at
+    c.description, c.rules, c.token_info, c.status, c.member_count, c.topic_count, c.last_post_at, c.created_at,
+    c.created_by, c.layout
   FROM communities c LEFT JOIN assets a ON a.id = c.asset_id`;
 
 function toCommunity(r: CommunityRecord): Community {
@@ -94,6 +101,8 @@ function toCommunity(r: CommunityRecord): Community {
     topicCount: r.topic_count,
     lastPostAt: r.last_post_at?.getTime() ?? null,
     createdAt: r.created_at.getTime(),
+    createdBy: r.created_by,
+    layout: r.layout,
   };
 }
 

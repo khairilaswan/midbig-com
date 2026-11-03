@@ -6,7 +6,8 @@ import { getSession } from "@/lib/auth";
 import { getViewer, type Viewer } from "@/lib/chat";
 import { createDefaults, setCommunityMod, setCommunityStatus } from "@/lib/communities";
 import { BLOCK_TEMPLATES, type BlockTemplate } from "@/lib/home-layout";
-import { setHomeLayout } from "@/lib/home-layout-store";
+import { setHomeLayout, setLayoutEditing } from "@/lib/home-layout-store";
+import { setSiteLook, siteLook } from "@/lib/look";
 import type { ActionResult } from "./actions";
 
 const NOT_ADMIN = "The admin portal needs an admin account with two-factor login turned on.";
@@ -83,5 +84,22 @@ export async function adminSaveHomeLayout(template: string, layout: unknown | nu
   return attempt(async () => {
     if (!BLOCK_TEMPLATES.includes(template as BlockTemplate)) return "Unknown template.";
     await setHomeLayout(await admin(), template as BlockTemplate, layout ?? null);
+  }, "/");
+}
+
+/** Makes a home template the site's default, keeping the rest of the site look. */
+export async function adminSetDefaultTemplate(template: string): Promise<ActionResult> {
+  return attempt(async () => {
+    if (!BLOCK_TEMPLATES.includes(template as BlockTemplate)) return "Unknown template.";
+    const site = await siteLook();
+    await setSiteLook(await admin(), { ...site, template }, site.memberChoice);
+  }, "/");
+}
+
+/** The switches for members' own home layouts and creators' community layouts. */
+export async function adminSetLayoutEditing(which: string, on: boolean): Promise<ActionResult> {
+  return attempt(async () => {
+    if (which !== "members" && which !== "communities") return "Unknown switch.";
+    await setLayoutEditing(await admin(), { [which]: Boolean(on) });
   }, "/");
 }
