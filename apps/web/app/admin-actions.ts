@@ -5,6 +5,8 @@ import { createBot, isAdmin, removeProfilePhotos, setCategories, setVerified, up
 import { getSession } from "@/lib/auth";
 import { getViewer, type Viewer } from "@/lib/chat";
 import { createDefaults, setCommunityMod, setCommunityStatus } from "@/lib/communities";
+import { BLOCK_TEMPLATES, type BlockTemplate } from "@/lib/home-layout";
+import { setHomeLayout } from "@/lib/home-layout-store";
 import type { ActionResult } from "./actions";
 
 const NOT_ADMIN = "The admin portal needs an admin account with two-factor login turned on.";
@@ -74,4 +76,12 @@ export async function adminCreateBot(input: BotInput): Promise<ActionResult> {
 
 export async function adminUpdateBot(userId: string, input: BotInput): Promise<ActionResult> {
   return attempt(async () => updateBot(await admin(), String(userId), input));
+}
+
+/** Saves one home template's blocks; null puts the template back to the original. */
+export async function adminSaveHomeLayout(template: string, layout: unknown | null): Promise<ActionResult> {
+  return attempt(async () => {
+    if (!BLOCK_TEMPLATES.includes(template as BlockTemplate)) return "Unknown template.";
+    await setHomeLayout(await admin(), template as BlockTemplate, layout ?? null);
+  }, "/");
 }

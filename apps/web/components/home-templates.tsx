@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { profilePath, type TemplateId } from "@midbig/shared";
+import { profilePath } from "@midbig/shared";
+import type { Block, BlockTemplate, TemplateLayout } from "@/lib/home-layout";
 import type { Community } from "@/lib/communities";
 import type { Leader, TrendingTicker } from "@/lib/social";
 import type { AssetRow, ForumMe, TopicSummary } from "@/lib/types";
@@ -77,26 +78,45 @@ function PostCta({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-/** Community hub: communities on the left, hot posts in the middle, markets on the right. */
-function Hub({ d }: { d: HomeData }) {
+/** Where a "see all" link in a block's heading goes. */
+const MORE: Partial<Record<Block["type"], { href: string; label: string }>> = {
+  hotPosts: { href: "/forum", label: "See all" },
+  postCards: { href: "/forum", label: "See all" },
+  latestPosts: { href: "/forum?sort=new", label: "All" },
+  popularCommunities: { href: "/communities", label: "All" },
+  miniMarket: { href: "/coins", label: "All prices" },
+  marketTable: { href: "/coins", label: "All prices" },
+  gainers: { href: "/gainers-losers", label: "See all" },
+  losers: { href: "/gainers-losers", label: "See all" },
+};
+
+function Heading({ block }: { block: Block }) {
+  if (!block.title) return null;
+  const more = MORE[block.type];
   return (
-    <div className="home-hub">
-      <aside className="hub-left panel">
-        {d.joined.length > 0 && (
-          <>
-            <h2>Your communities</h2>
-            <CommunityList items={d.joined.slice(0, 12)} />
-          </>
-        )}
-        <h2>Popular</h2>
-        <CommunityList items={d.popular} />
-        <p className="small">
-          <Link href="/communities">All communities →</Link>
-        </p>
-      </aside>
-      <section className="hub-main">
-        <h1 className="page-title">Today on midbig</h1>
-        <PostCta signedIn={d.signedIn} />
+    <h2>
+      {block.title} {more && <Link href={more.href}>{more.label}</Link>}
+    </h2>
+  );
+}
+
+/** One block's content, or null when it has nothing to show (so its box is left out too). */
+function BlockBody({ block, d }: { block: Block; d: HomeData }): React.ReactNode {
+  const n = block.limit ?? 10;
+  switch (block.type) {
+    case "title":
+      return <h1 className="page-title">{block.title || "midbig"}</h1>;
+    case "text":
+      return (
+        <div className="home-note">
+          <Heading block={block} />
+          {block.text && block.text.split("\n\n").map((para, i) => <p key={i}>{para}</p>)}
+        </div>
+      );
+    case "compose":
+      return <PostCta signedIn={d.signedIn} />;
+    case "sortTabs":
+      return (
         <nav className="tabs small" aria-label="Sort">
           <Link href="/forum" aria-current="page">
             🔥 Hot
@@ -104,90 +124,28 @@ function Hub({ d }: { d: HomeData }) {
           <Link href="/forum?sort=new">🆕 New</Link>
           <Link href="/forum?sort=top">🏆 Top</Link>
         </nav>
-        <TopicList topics={d.hot} me={d.me} empty="No posts yet. Start the first one." />
-        <p>
-          <Link href="/forum">More posts →</Link>
-        </p>
-      </section>
-      <aside className="hub-right">
-        {d.assets.length > 0 && (
-          <section className="panel">
-            <h2>Markets</h2>
-            <MiniMarket rows={d.assets.slice(0, 10)} />
-            <p className="small">
-              <Link href="/coins">All prices →</Link>
+      );
+    case "hotPosts":
+      return (
+        <>
+          <Heading block={block} />
+          <TopicList topics={d.hot.slice(0, n)} me={d.me} empty="No posts yet. Start the first one." />
+          {!block.title && (
+            <p>
+              <Link href="/forum">More posts →</Link>
             </p>
-          </section>
-        )}
-        <section className="panel">
-          <h2>Trending tickers</h2>
-          <TrendingList items={d.trending} />
-        </section>
-        <section className="panel">
-          <h2>Top this week</h2>
-          <LeaderList items={d.leaders} />
-        </section>
-      </aside>
-    </div>
-  );
-}
-
-/** Dashboard: price tiles, movers, trending, hot posts and leaders as cards. */
-function Dashboard({ d }: { d: HomeData }) {
-  return (
-    <div className="home-dash">
-      <h1 className="page-title">Market dashboard</h1>
-      {d.assets.length > 0 ? <AssetTiles rows={d.assets.slice(0, 8)} /> : <p className="empty">Market data is loading. Check back in a minute.</p>}
-      <div className="dash-grid">
-        {d.movers && (
-          <>
-            <section className="card">
-              <h2>
-                Top gainers <Link href="/gainers-losers">See all</Link>
-              </h2>
-              <MoverList rows={d.movers.gainers} />
-            </section>
-            <section className="card">
-              <h2>
-                Top losers <Link href="/gainers-losers">See all</Link>
-              </h2>
-              <MoverList rows={d.movers.losers} />
-            </section>
-          </>
-        )}
-        <section className="card">
-          <h2>Trending tickers</h2>
-          <TrendingList items={d.trending.slice(0, 8)} />
-        </section>
-        <section className="card span-2">
-          <h2>
-            Hot posts <Link href="/forum">See all</Link>
-          </h2>
-          <TopicList topics={d.hot.slice(0, 6)} me={d.me} empty="No posts yet." />
-        </section>
-        <section className="card">
-          <h2>Top members this week</h2>
-          <LeaderList items={d.leaders.slice(0, 8)} />
-        </section>
-      </div>
-    </div>
-  );
-}
-
-/** Social feed: a live tape, then one column of post cards with photos. */
-function Feed({ d }: { d: HomeData }) {
-  return (
-    <div className="home-feed">
-      <TickerTape rows={d.assets.slice(0, 20)} />
-      <div className="feed-cols">
-        <section className="feed-main">
-          <h1 className="page-title">Your feed</h1>
-          <PostCta signedIn={d.signedIn} />
+          )}
+        </>
+      );
+    case "postCards":
+      return (
+        <>
+          <Heading block={block} />
           {d.hot.length === 0 ? (
             <p className="muted">No posts yet. Start the first one.</p>
           ) : (
             <ol className="feed">
-              {d.hot.map((t) => (
+              {d.hot.slice(0, n).map((t) => (
                 <li key={t.id}>
                   <FeedCard topic={t} me={d.me} />
                 </li>
@@ -197,55 +155,14 @@ function Feed({ d }: { d: HomeData }) {
           <p>
             <Link href="/forum">More posts →</Link>
           </p>
-        </section>
-        <aside className="feed-side">
-          <section className="panel">
-            <h2>Trending tickers</h2>
-            <TrendingList items={d.trending} />
-          </section>
-          <section className="panel">
-            <h2>Who&rsquo;s helping most</h2>
-            <LeaderList items={d.leaders} />
-          </section>
-          <section className="panel">
-            <h2>Communities</h2>
-            <CommunityList items={d.popular.slice(0, 8)} />
-          </section>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-/** Trader terminal: dense prices beside the newest discussion, for wide screens. */
-function Terminal({ d }: { d: HomeData }) {
-  return (
-    <div className="home-term">
-      <TickerTape rows={d.assets.slice(0, 25)} />
-      <h1 className="sr-only">Trader terminal</h1>
-      <div className="term-panes">
-        <section className="term-pane">
-          <h2>Prices</h2>
-          {d.assets.length > 0 ? <MarketTable rows={d.assets.slice(0, 40)} /> : <p className="empty">Market data is loading.</p>}
-        </section>
-        <section className="term-pane">
-          {d.movers && (
-            <div className="term-movers">
-              <div>
-                <h2>Gainers</h2>
-                <MoverList rows={d.movers.gainers} />
-              </div>
-              <div>
-                <h2>Losers</h2>
-                <MoverList rows={d.movers.losers} />
-              </div>
-            </div>
-          )}
-          <h2>
-            Latest posts <Link href="/forum?sort=new">All</Link>
-          </h2>
+        </>
+      );
+    case "latestPosts":
+      return (
+        <>
+          <Heading block={block} />
           <ol className="term-feed">
-            {d.fresh.map((t) => (
+            {d.fresh.slice(0, n).map((t) => (
               <li key={t.id}>
                 <span className="muted small">{ago(t.createdAt)}</span>{" "}
                 <Link href={t.community.path} className="community-tag">
@@ -258,17 +175,169 @@ function Terminal({ d }: { d: HomeData }) {
               </li>
             ))}
           </ol>
-          <h2>Trending</h2>
-          <TrendingList items={d.trending.slice(0, 6)} />
+        </>
+      );
+    case "yourCommunities":
+      if (d.joined.length === 0) return null;
+      return (
+        <>
+          <Heading block={block} />
+          <CommunityList items={d.joined.slice(0, n)} />
+        </>
+      );
+    case "popularCommunities":
+      return (
+        <>
+          <Heading block={block} />
+          <CommunityList items={d.popular.slice(0, n)} />
+        </>
+      );
+    case "miniMarket":
+      if (d.assets.length === 0) return null;
+      return (
+        <>
+          <Heading block={block} />
+          <MiniMarket rows={d.assets.slice(0, n)} />
+        </>
+      );
+    case "marketTable":
+      return (
+        <>
+          <Heading block={block} />
+          {d.assets.length > 0 ? <MarketTable rows={d.assets.slice(0, n)} /> : <p className="empty">Market data is loading.</p>}
+        </>
+      );
+    case "assetTiles":
+      return (
+        <>
+          <Heading block={block} />
+          {d.assets.length > 0 ? <AssetTiles rows={d.assets.slice(0, n)} /> : <p className="empty">Market data is loading. Check back in a minute.</p>}
+        </>
+      );
+    case "tickerTape":
+      return d.assets.length > 0 ? <TickerTape rows={d.assets.slice(0, n)} /> : null;
+    case "gainers":
+    case "losers":
+      if (!d.movers) return null;
+      return (
+        <>
+          <Heading block={block} />
+          <MoverList rows={d.movers[block.type].slice(0, n)} />
+        </>
+      );
+    case "movers":
+      if (!d.movers) return null;
+      return (
+        <>
+          <Heading block={block} />
+          <div className="term-movers">
+            <div>
+              <h2>Gainers</h2>
+              <MoverList rows={d.movers.gainers.slice(0, n)} />
+            </div>
+            <div>
+              <h2>Losers</h2>
+              <MoverList rows={d.movers.losers.slice(0, n)} />
+            </div>
+          </div>
+        </>
+      );
+    case "trending":
+      return (
+        <>
+          <Heading block={block} />
+          <TrendingList items={d.trending.slice(0, n)} />
+        </>
+      );
+    case "leaders":
+      return (
+        <>
+          <Heading block={block} />
+          <LeaderList items={d.leaders.slice(0, n)} />
+        </>
+      );
+  }
+}
+
+/** A region's blocks. `box` wraps each block in a panel or card; blocks that fill their own space skip it. */
+function Region({ blocks, d, box }: { blocks: Block[] | undefined; d: HomeData; box?: "panel" | "card" }) {
+  return (
+    <>
+      {(blocks ?? []).map((block) => {
+        const body = BlockBody({ block, d });
+        if (body == null) return null;
+        const bare = !box || block.type === "title" || block.type === "tickerTape" || block.type === "compose" || block.type === "sortTabs";
+        if (bare) return <div key={block.id} className="home-block">{body}</div>;
+        return (
+          <section key={block.id} className={`${box}${block.wide ? " span-2" : ""}`}>
+            {body}
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
+const hasTitle = (layout: TemplateLayout) => Object.values(layout).some((l) => l.some((b) => b.type === "title"));
+
+/** The home page for a community-first template, built from the admin's blocks. */
+export function HomeTemplate({ template, layout, data: d }: { template: BlockTemplate; layout: TemplateLayout; data: HomeData }) {
+  const title = hasTitle(layout) ? null : <h1 className="sr-only">midbig</h1>;
+  if (template === "hub") {
+    return (
+      <div className="home-hub">
+        {title}
+        <aside className="hub-left panel">
+          <Region blocks={layout.left} d={d} />
+        </aside>
+        <section className="hub-main">
+          <Region blocks={layout.main} d={d} />
+        </section>
+        <aside className="hub-right">
+          <Region blocks={layout.right} d={d} box="panel" />
+        </aside>
+      </div>
+    );
+  }
+  if (template === "dashboard") {
+    return (
+      <div className="home-dash">
+        {title}
+        <Region blocks={layout.top} d={d} />
+        <div className="dash-grid">
+          <Region blocks={layout.grid} d={d} box="card" />
+        </div>
+      </div>
+    );
+  }
+  if (template === "feed") {
+    return (
+      <div className="home-feed">
+        {title}
+        <Region blocks={layout.top} d={d} />
+        <div className="feed-cols">
+          <section className="feed-main">
+            <Region blocks={layout.main} d={d} />
+          </section>
+          <aside className="feed-side">
+            <Region blocks={layout.side} d={d} box="panel" />
+          </aside>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="home-term">
+      {title}
+      <Region blocks={layout.top} d={d} />
+      <div className="term-panes">
+        <section className="term-pane">
+          <Region blocks={layout.left} d={d} />
+        </section>
+        <section className="term-pane">
+          <Region blocks={layout.right} d={d} />
         </section>
       </div>
     </div>
   );
-}
-
-export function HomeTemplate({ template, data }: { template: Exclude<TemplateId, "markets">; data: HomeData }) {
-  if (template === "hub") return <Hub d={data} />;
-  if (template === "dashboard") return <Dashboard d={data} />;
-  if (template === "feed") return <Feed d={data} />;
-  return <Terminal d={data} />;
 }

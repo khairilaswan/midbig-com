@@ -6,6 +6,8 @@ import { HomeTemplate, type HomeData } from "@/components/home-templates";
 import { getSession } from "@/lib/auth";
 import { joinedCommunities, listCommunities } from "@/lib/communities";
 import { forumViewer, listTopics } from "@/lib/forum";
+import { BLOCK_TEMPLATES, needs, type BlockTemplate, type TemplateLayout } from "@/lib/home-layout";
+import { homeLayouts } from "@/lib/home-layout-store";
 import { currentLook } from "@/lib/look";
 import { getMarketPage, getMovers } from "@/lib/server";
 import { categories, type Categories } from "@/lib/settings";
@@ -13,7 +15,7 @@ import { trendingTickers, weeklyLeaders } from "@/lib/social";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ page?: string }> };
+type Props = { searchParams: Promise<{ page?: string; template?: string }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const page = parsePage((await searchParams).page);
@@ -28,29 +30,45 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
  * always the table.
  */
 export default async function Home({ searchParams }: Props) {
-  const page = parsePage((await searchParams).page);
+  const sp = await searchParams;
+  const page = parsePage(sp.page);
   if (Number.isNaN(page)) notFound();
   const session = await getSession();
   const [on, { look }] = await Promise.all([categories(), currentLook(session?.user.id ?? null)]);
-  if (look.template === "markets" || page > 1) {
+  // ?template=feed previews another template, such as from the admin's layout editor.
+  const template = BLOCK_TEMPLATES.includes(sp.template as BlockTemplate) ? (sp.template as BlockTemplate) : look.template;
+  if (template === "markets" || page > 1) {
     if (!on.crypto) return page > 1 ? notFound() : <CryptoOff stocks={on.stock} forex={on.forex} />;
     return <CoinMarket page={page} base="/" />;
   }
-  return <HomeTemplate template={look.template} data={await homeData(on)} />;
+  const layout = (await homeLayouts())[template];
+  return <HomeTemplate template={template} layout={layout} data={await homeData(on, layout)} />;
 }
 
-async function homeData(on: Categories): Promise<HomeData> {
+/** Loads only what the layout's blocks show, and only as many rows as they ask for. */
+async function homeData(on: Categories, layout: TemplateLayout): Promise<HomeData> {
   const { viewer, me } = await forumViewer();
   const cls = on.crypto ? "crypto" : on.stock ? "stock" : on.forex ? "forex" : null;
+  const n = {
+    assets: needs(layout, ["miniMarket", "marketTable", "assetTiles", "tickerTape"]),
+    movers: needs(layout, ["gainers", "losers", "movers"]),
+    hot: needs(layout, ["hotPosts", "postCards"]),
+    fresh: needs(layout, ["latestPosts"]),
+    trending: needs(layout, ["trending"]),
+    leaders: needs(layout, ["leaders"]),
+    popular: needs(layout, ["popularCommunities"]),
+    joined: needs(layout, ["yourCommunities"]),
+  };
+  const none = { topics: [] };
   const [market, movers, hot, fresh, trending, leaders, popular, joined] = await Promise.all([
-    cls ? getMarketPage(1, cls) : null,
-    cls ? getMovers(5, cls) : null,
-    listTopics({ sort: "hot", limit: 15, viewerId: viewer?.id }),
-    listTopics({ sort: "new", limit: 20, viewerId: viewer?.id }),
-    trendingTickers(10),
-    weeklyLeaders(10),
-    listCommunities({ sort: "members", limit: 12 }),
-    viewer ? joinedCommunities(viewer.id) : [],
+    cls && n.assets ? getMarketPage(1, cls) : null,
+    cls && n.movers ? getMovers(n.movers, cls) : null,
+    n.hot ? listTopics({ sort: "hot", limit: n.hot, viewerId: viewer?.id }) : none,
+    n.fresh ? listTopics({ sort: "new", limit: n.fresh, viewerId: viewer?.id }) : none,
+    n.trending ? trendingTickers(n.trending) : [],
+    n.leaders ? weeklyLeaders(n.leaders) : [],
+    n.popular ? listCommunities({ sort: "members", limit: n.popular }) : [],
+    viewer && n.joined ? joinedCommunities(viewer.id) : [],
   ]);
   return {
     me,

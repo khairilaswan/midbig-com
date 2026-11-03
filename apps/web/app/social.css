@@ -991,7 +991,7 @@ button.flair {
 
 @media (min-width: 1000px) {
   .home-hub {
-    grid-template-columns: 200px minmax(0, 1fr) 280px;
+    grid-template-columns: 240px minmax(0, 1fr) 320px;
     align-items: start;
   }
 
@@ -1086,8 +1086,7 @@ button.flair {
 
 @media (min-width: 1000px) {
   .feed-cols {
-    grid-template-columns: minmax(0, 640px) 300px;
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr) 340px;
     align-items: start;
   }
 
@@ -1103,10 +1102,6 @@ button.flair {
 }
 
 /* Home: trader terminal */
-:root[data-template="terminal"] main.wrap {
-  max-width: 1600px;
-}
-
 .home-term h2 {
   font-size: 13px;
   text-transform: uppercase;
@@ -1154,4 +1149,196 @@ button.flair {
 .term-feed li {
   padding: 6px 0;
   border-bottom: 1px solid var(--line);
+}
+
+/* Hover cards for member and community names */
+.hovercard {
+  position: fixed;
+  z-index: 60;
+  width: 300px;
+  padding: 12px 14px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+  font-size: 14px;
+}
+
+.hovercard-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.hovercard-img {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.hovercard-name {
+  font-weight: 700;
+}
+
+.hovercard-text {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.hovercard-stats {
+  display: flex;
+  gap: 16px;
+  margin: 10px 0 0;
+}
+
+.hovercard-stats dt {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hovercard-stats dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Home: admin's text note block */
+.home-note p {
+  margin: 0 0 8px;
+  white-space: pre-line;
+}
+
+/* Admin: home layout editor */
+.layout-editor .tabs .btn.link {
+  padding: 6px 10px;
+}
+
+.layout-editor .tabs .active {
+  font-weight: 700;
+  border-bottom: 2px solid var(--accent);
+}
+
+.layout-regions {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+@media (min-width: 900px) {
+  .layout-regions.regions-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .layout-regions.regions-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.layout-region {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+}
+
+.layout-region.drop-ok {
+  border-color: var(--accent);
+}
+
+.layout-region h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.layout-blocks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.layout-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.layout-block.dragging {
+  opacity: 0.5;
+}
+
+.layout-block p {
+  margin: 4px 0;
+}
+
+.layout-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-block-tools {
+  margin-left: auto;
+}
+
+.layout-block-tools select {
+  font-size: 12px;
+  max-width: 110px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--muted);
+}
+
+.layout-block-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.layout-block-fields label {
+  display: grid;
+  gap: 2px;
+}
+
+.layout-block-fields input[type="number"] {
+  width: 70px;
+}
+
+.layout-text {
+  flex: 1 1 100%;
+}
+
+.layout-text textarea {
+  width: 100%;
+}
+
+.layout-add {
+  width: 100%;
+}
+
+.layout-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* "See all" links in home block headings */
+:is(.home-hub, .home-feed, .home-term) h2:has(> a) {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+:is(.home-hub, .home-feed, .home-term) h2 > a {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
 }
