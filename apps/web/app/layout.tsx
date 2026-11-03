@@ -1,12 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { lookVars, mediaUrl, type MediaType } from "@midbig/shared";
 import { AccountMenu } from "@/components/account-menu";
 import { LiveConnection } from "@/components/live";
 import { CookieBanner } from "@/components/privacy";
 import { RegisterServiceWorker } from "@/components/register-sw";
 import { SearchBox } from "@/components/search-box";
+import { getSession } from "@/lib/auth";
+import { currentLook } from "@/lib/look";
+import { pool } from "@/lib/server";
+import { categories } from "@/lib/settings";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
+import { unreadCount } from "@/lib/social";
 import "./globals.css";
+import "./social.css";
+import "./themes.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -21,6 +29,9 @@ export const metadata: Metadata = {
   openGraph: { siteName: SITE_NAME, type: "website" },
 };
 
+// The header follows the admin's category switches, so every page renders per request.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -30,9 +41,40 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** The header's view of the signed-in member: name, photo and unread notifications. */
+async function headerMe(userId: string, email: string) {
+  const [u, unread] = await Promise.all([
+    pool().query<{ chat_name: string | null; avatar_id: string | null; mime: MediaType | null }>(
+      `SELECT chat_name, avatar_id, (SELECT mime FROM media m WHERE m.id = avatar_id AND m.status = 'visible') AS mime FROM "user" WHERE id = $1`,
+      [userId],
+    ),
+    unreadCount(userId).catch(() => 0),
+  ]);
+  const r = u.rows[0];
+  return {
+    name: r?.chat_name ?? email,
+    email,
+    avatar: r?.avatar_id && r.mime ? mediaUrl(r.avatar_id, r.mime) : null,
+    unread,
+  };
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession();
+  const [on, { look }, me] = await Promise.all([
+    categories(),
+    currentLook(session?.user.id ?? null),
+    session ? headerMe(session.user.id, session.user.email) : null,
+  ]);
+  const vars = lookVars(look);
   return (
-    <html lang="en-US">
+    <html
+      lang="en-US"
+      data-style={look.style}
+      data-mode={look.mode}
+      data-template={look.template}
+      style={vars as React.CSSProperties}
+    >
       <body>
         <LiveConnection url={process.env.PUBLIC_WS_URL ?? null} />
         <RegisterServiceWorker />
@@ -42,18 +84,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               mid<span>big</span>
             </Link>
             <nav className="nav">
-              <Link href="/">Coins</Link>
-              <Link href="/stocks">Stocks</Link>
-              <Link href="/forex">Forex</Link>
-              <Link href="/gainers-losers">Movers</Link>
+              <Link href="/forum">Communities</Link>
+              {on.crypto && <Link href="/coins">Coins</Link>}
+              {on.stock && <Link href="/stocks">Stocks</Link>}
+              {on.forex && <Link href="/forex">Forex</Link>}
+              {on.crypto && <Link href="/gainers-losers">Movers</Link>}
               <Link href="/watchlist">Watchlist</Link>
               <Link href="/portfolio">Portfolio</Link>
               <Link href="/what-if">What if</Link>
               <Link href="/chat">Chat</Link>
-              <Link href="/forum">Forum</Link>
             </nav>
             <SearchBox />
-            <AccountMenu />
+            <AccountMenu me={me} />
           </div>
         </header>
         <main className="wrap">{children}</main>
@@ -79,6 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/terms">Terms</Link>
               <Link href="/privacy">Privacy</Link>
               <Link href="/rules">Community rules</Link>
+              <Link href="/settings/appearance">Appearance</Link>
               <Link href="/privacy-choices">Do Not Sell or Share My Personal Information</Link>
             </p>
             <p className="muted">© {new Date().getFullYear()} midbig.com</p>

@@ -1,24 +1,8 @@
 /**
- * Forum and reputation rules: categories, limits, reputation levels and
- * topic URLs. Posts go through the same scam filter as chat (checkMessage).
+ * Forum and reputation rules: limits, reputation levels and topic URLs.
+ * Topics live in communities (community.ts). Posts go through the same scam
+ * filter as chat (checkMessage).
  */
-
-export const FORUM_CATEGORIES = {
-  general: { name: "General", blurb: "Markets, news and anything that doesn't fit elsewhere." },
-  crypto: { name: "Crypto", blurb: "Coins, tokens, exchanges and on-chain talk." },
-  stocks: { name: "Stocks", blurb: "US stocks, earnings and the economy." },
-  forex: { name: "Forex", blurb: "Currencies, central banks and rates." },
-  strategy: {
-    name: "Strategies and risk",
-    blurb: "How you size positions, hedge and survive drawdowns. Share your reasoning, not signals.",
-  },
-  feedback: { name: "Site feedback", blurb: "Bugs, ideas and requests for midbig itself." },
-} as const;
-export type ForumCategory = keyof typeof FORUM_CATEGORIES;
-
-export function isForumCategory(s: string): s is ForumCategory {
-  return Object.hasOwn(FORUM_CATEGORIES, s);
-}
 
 export const FORUM_LIMITS = {
   titleMin: 8,
@@ -32,8 +16,10 @@ export const FORUM_LIMITS = {
   replyGapMs: 15_000,
   topicsPerDay: 10,
   repliesPerDay: 100,
-  /** Topics and replies per page. */
+  /** Topics per page. */
   pageSize: 30,
+  /** Comments loaded with a topic. */
+  commentsMax: 500,
   /** Distinct reports that hide a post until a moderator looks. */
   reportsToHide: 3,
   bioMax: 160,
@@ -42,8 +28,8 @@ export const FORUM_LIMITS = {
 // ---------------------------------------------------------------------------
 // Reputation
 
-/** Points for each "helpful" vote a post gets, and lost for each post moderators remove. */
-export const REP_POINTS = { helpful: 1, removed: -10 };
+/** Points for each upvote a post gets (a downvote takes one away), and lost for each post moderators remove. */
+export const REP_POINTS = { vote: 1, removed: -10 };
 
 /**
  * Levels earned from reputation. Trusted members' links to sites off the
@@ -78,11 +64,12 @@ export function nextLevel(rep: number): { name: RepLevel; needs: number } | null
 }
 
 /**
- * Reputation from what a member's posts earned: helpful votes from other
- * people, minus a penalty for each post moderators removed. Never below zero.
+ * Reputation from what a member's posts earned: other people's upvotes minus
+ * their downvotes, minus a penalty for each post moderators removed. Never
+ * below zero.
  */
-export function reputation(helpfulVotes: number, removedPosts: number): number {
-  return Math.max(0, helpfulVotes * REP_POINTS.helpful + removedPosts * REP_POINTS.removed);
+export function reputation(netVotes: number, removedPosts: number): number {
+  return Math.max(0, netVotes * REP_POINTS.vote + removedPosts * REP_POINTS.removed);
 }
 
 // ---------------------------------------------------------------------------

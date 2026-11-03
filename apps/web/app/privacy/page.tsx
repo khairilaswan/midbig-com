@@ -47,7 +47,7 @@ export default function PrivacyPage() {
             <td>To show and value your portfolio and send your alerts</td>
           </tr>
           <tr>
-            <td>Public name, bio, chat messages, forum posts, helpful votes, reputation, reports you make, people you mute</td>
+            <td>Public name, bio, chat messages, forum posts, votes, communities you join, reputation, reports you make, people you mute</td>
             <td>To run chat and the forum, show public profiles, keep them free of scams, and handle reports</td>
           </tr>
           <tr>
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
             <td>Security, rate limits, bot checks and fixing problems</td>
           </tr>
           <tr>
-            <td>Cookies that keep you logged in and remember your privacy choice</td>
+            <td>Cookies that keep you logged in and remember your privacy choice and the look you picked in Appearance</td>
             <td>Needed for the site to work</td>
           </tr>
         </tbody>

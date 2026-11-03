@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { MarketTable } from "@/components/market";
+import { notFound } from "next/navigation";
 import { getMovers } from "@/lib/server";
+import { classEnabled } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function GainersLosers() {
+  if (!(await classEnabled("crypto"))) notFound();
   const { gainers, losers } = await getMovers(30);
   return (
     <>

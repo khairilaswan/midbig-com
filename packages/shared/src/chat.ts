@@ -14,12 +14,19 @@ export function coinRoom(assetId: string): string {
   return `coin:${assetId}`;
 }
 
-export type ParsedRoom = { kind: "global" } | { kind: "coin"; assetId: string };
+/** Room for a community with no listed asset (hubs and m/ tokens). Asset communities use the asset's room. */
+export function communityRoom(communityId: string | number): string {
+  return `c:${communityId}`;
+}
+
+export type ParsedRoom = { kind: "global" } | { kind: "coin"; assetId: string } | { kind: "community"; communityId: string };
 
 export function parseRoom(room: string): ParsedRoom | null {
   if (room === GLOBAL_ROOM) return { kind: "global" };
   const m = /^coin:([a-z0-9-]{1,100})$/.exec(room);
-  return m ? { kind: "coin", assetId: m[1]! } : null;
+  if (m) return { kind: "coin", assetId: m[1]! };
+  const c = /^c:(\d{1,18})$/.exec(room);
+  return c ? { kind: "community", communityId: c[1]! } : null;
 }
 
 /** Most rooms one browser connection may follow at once. */
@@ -42,7 +49,7 @@ export const CHAT_LIMITS = {
   reportsToHide: 3,
 };
 
-export type ChatBadge = "mod" | "admin" | null;
+export type ChatBadge = "mod" | "admin" | "bot" | null;
 export type ChatRole = "user" | "moderator" | "admin";
 
 export interface ChatMessage {
@@ -64,7 +71,8 @@ export type ChatEvent =
   | { type: "chat"; room: string; msg: ChatMessage }
   | { type: "chat-remove"; room: string; ids: string[] };
 
-export function badgeFor(role: ChatRole): ChatBadge {
+export function badgeFor(role: ChatRole, isBot = false): ChatBadge {
+  if (isBot) return "bot";
   return role === "admin" ? "admin" : role === "moderator" ? "mod" : null;
 }
 
@@ -117,6 +125,7 @@ export function chatNameProblem(name: string, staffNames: string[], isStaff = fa
   if (RESERVED_PARTS.some((p) => sk.includes(p)) || words.some((w) => RESERVED_WORDS.has(w))) {
     return "That name looks like a staff account. Please pick another.";
   }
+  if (/bot$/i.test(name.replace(/[_0-9]+$/, ""))) return "Names ending in \"bot\" are kept for midbig's bots. Please pick another.";
   if (staffNames.some((s) => nameSkeleton(s) === sk && s.toLowerCase() !== name.toLowerCase())) {
     return "That name looks too much like a moderator's. Please pick another.";
   }

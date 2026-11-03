@@ -6,7 +6,9 @@ accounts, a watchlist, a portfolio tracker, a what-if simulator, price alerts
 and an installable app; Phase 3 adds live chat with a scam filter and
 moderation, two-factor login and the legal pages needed to launch; Phase 4 adds
 S&P 500 stocks and 30 forex pairs, switched on by a Finnhub API key; Phase 5
-adds the forum, public profiles with reputation, and historical stress tests.
+adds the forum, public profiles with reputation, and historical stress tests;
+Phase 6 turns the forum into communities (b/ for main assets, m/ for smaller
+coins) with up and down votes, threaded comments, bots and an admin portal.
 
 ## How it works
 
@@ -144,6 +146,38 @@ whose licence allows display, then set `FINNHUB_CALLS_PER_MINUTE` and `FINNHUB_W
 
 Not built yet from the plan's Phase 5: prediction leaderboards (need a lawyer's view first), AI summaries and
 read-only exchange sync.
+
+### Communities, votes, bots and the admin portal (Phase 6)
+
+Phase 6 replaces Phase 5's six fixed forum categories with communities. Tables are in
+`db/migrations/006_communities.sql`, which moves existing topics into communities on its first run; the pure rules
+(names, hot rank, votes, comment trees, mentions, bot replies) are in `packages/shared/src/community.ts` and
+`bots.ts`, with tests.
+
+- **b/ and m/**: `b/` communities are for main assets and topic hubs and only admins create them: `b/bitcoin` (coin
+  id), `b/AAPL` (stock ticker), `b/eurusd` (forex pair), plus hubs `b/general`, `b/crypto`, `b/stocks`, `b/forex`,
+  `b/strategy` and `b/midbig`. `m/` communities are for smaller or unlisted coins and are made by **verified**
+  members (up to 3 each), who become their moderators. A listed asset's name is kept for its b/ community. Each
+  community has Forum, Chart, Chat and Info tabs (`/b/<name>?tab=chat`), members (Join), its own rules, and a
+  bull/bear gauge from the last week's topic calls. Old `/forum/c/<category>` links redirect to the hubs; topic URLs
+  are unchanged.
+- **Votes**: ▲/▼ on topics and comments. Topics sort by Hot (Reddit-style: log of net votes plus age), New or Top
+  (today to all time). Accounts vote after one day and downvote after three; 100 votes an hour. Reputation is now
+  the net votes a member's posts received, minus 10 per removed post.
+- **Threaded comments**: replies nest six deep, sort by Best, Newest or Oldest, fold, and fold themselves at -4.
+- **$TICKER and @name**: `$BTC` in any post or chat message links to `/t/BTC`, which opens the asset's community;
+  `@name` links to a profile.
+- **Bots** are accounts with a Bot badge; members call them with `@handle` in a post, comment or chat message.
+  `@pricebot` (price and key figures), `@riskbot` (volatility, worst fall, worst day from a year of daily closes) and
+  `@pulsebot` (a community's last 24 hours) are built in and free. Admins can add more, including AI bots that answer
+  with Claude when `ANTHROPIC_API_KEY` is set (`BOT_AI_MODEL` picks the model). Each bot has a daily cap and each
+  member can call bots 20 times an hour. Code: `apps/web/lib/bots.ts`.
+- **Admin portal** (`/admin`, admins with two-factor login): switch the Crypto, Stocks and Forex categories on or
+  off (hides their pages, lists, search, communities and topics; nothing is deleted), create the default b/
+  communities for the top coins, stocks and pairs in one click, suspend communities and pick their moderators,
+  verify members, add and tune bots, and read the admin log. The chat and forum report queues stay on `/mod`.
+
+Not built yet: payments and paid plans, and how members get verified (identity checks); both are on hold.
 
 ### The 1-minute freshness rule
 

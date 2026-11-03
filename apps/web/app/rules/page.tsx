@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CHAT_LIMITS, FORUM_LIMITS, REP_POINTS, TRUSTED_MIN_AGE_MS, TRUSTED_MIN_REP } from "@midbig/shared";
+import { CHAT_LIMITS, COLLAPSE_SCORE, FORUM_LIMITS, REP_POINTS, TRUSTED_MIN_AGE_MS, TRUSTED_MIN_REP } from "@midbig/shared";
 import { CONTACT_EMAIL, LEGAL_UPDATED } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -68,16 +68,29 @@ export default function RulesPage() {
           posted in the last day.</li>
       </ul>
 
-      <h2 id="reputation">Reputation</h2>
+      <h2 id="communities">Communities</h2>
       <ul>
-        <li>Press <strong>👍 Helpful</strong> on posts that taught you something. Each vote from someone else earns
-          the author {REP_POINTS.helpful} point; each post a moderator removes costs {Math.abs(REP_POINTS.removed)}.
-          Accounts can vote after their first day.</li>
+        <li><strong>b/</strong> communities are midbig&rsquo;s own: the main coins, stocks and forex pairs (b/bitcoin,
+          b/AAPL, b/eurusd) and topic hubs such as b/general.</li>
+        <li><strong>m/</strong> communities are for smaller coins and are made by verified members. Smaller coins are
+          riskier and easier to manipulate; check the contract address and do your own research.</li>
+        <li>Each community has its own topics, chat, chart and info. Its moderators can remove posts and pin or lock
+          topics there, and community rules add to these ones.</li>
+        <li>Bots such as @pricebot, @riskbot and @pulsebot answer when you mention them. Their replies are automated,
+          labelled &ldquo;Bot&rdquo;, and not financial advice.</li>
+      </ul>
+
+      <h2 id="reputation">Votes and reputation</h2>
+      <ul>
+        <li>Press <strong>▲</strong> on posts that add something and <strong>▼</strong> on ones that don&rsquo;t
+          (shilling, spam, no reasoning). Each upvote from someone else earns the author {REP_POINTS.vote} point and
+          each downvote costs one; each post a moderator removes costs {Math.abs(REP_POINTS.removed)}. Posts at{" "}
+          {COLLAPSE_SCORE} or below are folded away. Accounts can upvote after their first day and downvote after three.</li>
         <li>Levels: Member from 10 points, Trusted from {TRUSTED_MIN_REP} (with an account at least{" "}
           {TRUSTED_MIN_AGE_MS / 86_400_000} days old), Veteran from 250.</li>
         <li>Trusted members can link to sites off our allow list without waiting for a moderator, and their reports
           count double.</li>
-        <li>Reputation measures how helpful someone&rsquo;s posts have been, not whether their trades make money. It
+        <li>Reputation measures how useful others found someone&rsquo;s posts, not whether their trades make money. It
           is never a reason to follow anyone&rsquo;s calls.</li>
         <li>Trading votes, voting rings and extra accounts break these rules; moderators reset reputation built that
           way.</li>

@@ -34,6 +34,6 @@ services:
 
   caddy:
     ports: !override
-      - "8000:80"
+      - "127.0.0.1:8000:80"
     environment:
       SITE_ADDRESS: ":80"

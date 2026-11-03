@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { MarketTable } from "@/components/market";
+import { notFound } from "next/navigation";
 import { getMarketPage } from "@/lib/server";
+import { classEnabled } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ForexPage() {
+  if (!(await classEnabled("forex"))) notFound();
   const { rows, total } = await getMarketPage(1, "forex");
   return (
     <>
