@@ -12,6 +12,7 @@ import {
   parseSort,
   parseWindow,
   type Namespace,
+  profilePath,
 } from "@midbig/shared";
 import { StockHeader, ForexHeader } from "@/components/asset-header";
 import { ChatRoom } from "@/components/chat";
@@ -20,8 +21,15 @@ import { CommunityEditForm, JoinButton } from "@/components/community";
 import { Pager, SortTabs, sortQuery, TopicList } from "@/components/forum-list";
 import { PriceChart } from "@/components/price-chart";
 import { WatchButton } from "@/components/watch-button";
+import { saveCommunityLayout } from "@/app/layout-actions";
+import { MiniMarket } from "@/components/home-live";
+import { LayoutEditor } from "@/components/home-layout-editor";
+import { Avatar } from "@/components/avatar";
+import { hasBlock, type Block, type TemplateLayout } from "@/lib/home-layout";
+import { canEditCommunityLayout, communityLayout } from "@/lib/home-layout-store";
+import { trendingTickers, weeklyLeaders, type Leader, type TrendingTicker } from "@/lib/social";
 import { isAdmin } from "@/lib/admin";
-import { chatRoomFor, communityMods, getCommunity, membership, sentiment, type Community } from "@/lib/communities";
+import { chatRoomFor, communityMods, getCommunity, listCommunities, membership, sentiment, type Community } from "@/lib/communities";
 import { forumViewer, listTopics } from "@/lib/forum";
 import { getAsset } from "@/lib/server";
 import { classEnabled } from "@/lib/settings";
@@ -33,7 +41,7 @@ export type CommunityProps = {
 };
 
 const TABS = { forum: "Forum", chart: "Chart", chat: "Chat", info: "Info" } as const;
-type Tab = keyof typeof TABS;
+type Tab = keyof typeof TABS | "layout";
 
 async function load(ns: Namespace, slug: string): Promise<Community | null> {
   const c = await getCommunity(ns, decodeURIComponent(slug));
@@ -78,7 +86,7 @@ export async function CommunityPage({ ns, props }: { ns: Namespace; props: Commu
   const c = await load(ns, slug);
   if (!c) notFound();
   if (decodeURIComponent(slug) !== c.path.slice(3)) permanentRedirect(c.path);
-  const tab: Tab = sp.tab && Object.hasOwn(TABS, sp.tab) ? (sp.tab as Tab) : "forum";
+  let tab: Tab = sp.tab === "layout" || (sp.tab && Object.hasOwn(TABS, sp.tab)) ? (sp.tab as Tab) : "forum";
   const sort = parseSort(sp.sort);
   const window = parseWindow(sp.t);
   const page = Math.max(1, Number(sp.page) || 1);
@@ -91,6 +99,16 @@ export async function CommunityPage({ ns, props }: { ns: Namespace; props: Commu
     c.assetId ? getAsset(c.assetId) : null,
   ]);
   const price = asset ? (asset.live?.p ?? asset.refPrice) : null;
+  const canArrange = await canEditCommunityLayout(viewer, c);
+  if (tab === "layout" && !canArrange) tab = "forum";
+  const layout = communityLayout(c.layout);
+  const [trending, popular, leaders] = await Promise.all([
+    hasBlock(layout, "trending") ? trendingTickers(Math.max(...blocksOf(layout, "trending").map((b) => b.limit ?? 10))) : [],
+    hasBlock(layout, "popularCommunities") ? listCommunities({ sort: "members", limit: 50 }) : [],
+    hasBlock(layout, "leaders") ? weeklyLeaders(30) : [],
+  ]);
+  const watched = tab === "chart" && asset && viewer ? await isWatched(viewer.id, asset.id) : false;
+  const ctx: SideCtx = { c, mood, mods, asset, tab, trending, popular, leaders };
 
   return (
     <div className="community">
@@ -120,6 +138,11 @@ export async function CommunityPage({ ns, props }: { ns: Namespace; props: Commu
           <Link href={`/forum/new?community=${c.id}`} className="btn small secondary">
             + Post
           </Link>
+          {canArrange && (
+            <Link href={tab === "layout" ? c.path : `${c.path}?tab=layout`} className="btn small secondary">
+              {tab === "layout" ? "Done arranging" : "✎ Arrange page"}
+            </Link>
+          )}
         </div>
       </header>
       {c.ns === "m" && (
@@ -128,88 +151,270 @@ export async function CommunityPage({ ns, props }: { ns: Namespace; props: Commu
           never send money to anyone you meet here.
         </p>
       )}
-      <Sentiment bulls={mood.bulls} bears={mood.bears} />
-
-      <nav className="tabs community-tabs" aria-label="Community">
-        {(Object.keys(TABS) as Tab[])
-          .filter((t) => t !== "chart" || c.assetId)
-          .map((t) => (
-            <Link key={t} href={t === "forum" ? c.path : `${c.path}?tab=${t}`} aria-current={tab === t ? "page" : undefined}>
-              {TABS[t]}
-            </Link>
-          ))}
-      </nav>
-
-      <div className="forum-cols">
-        <section>
-          {tab === "forum" && (
-            <ForumTab c={c} me={me} sort={sort} window={window} page={page} viewerId={viewer?.id} flair={isFlair(sp.flair) ? sp.flair : null} />
-          )}
-          {tab === "chat" && <ChatRoom room={chatRoomFor(c)} title={`${c.label} chat`} tall />}
-          {tab === "chart" && asset && (
-            <>
-              {asset.assetClass === "stock" ? <StockHeader asset={asset} /> : asset.assetClass === "forex" ? <ForexHeader asset={asset} /> : <CoinHeader asset={asset} />}
-              <div className="coin-actions">
-                <WatchButton
-                  assetId={asset.id}
-                  name={asset.name}
-                  initial={viewer ? await isWatched(viewer.id, asset.id) : false}
-                  signedIn={!!viewer}
-                />
-                <Link href={`/alerts?coin=${asset.id}`} className="btn secondary small">
-                  🔔 Price alert
-                </Link>
-                {asset.assetClass !== "forex" && (
-                  <Link href={`/portfolio?add=${asset.id}`} className="btn secondary small">
-                    + Add to portfolio
-                  </Link>
-                )}
-                <Link href="/what-if" className="btn secondary small">
-                  What if…
-                </Link>
-              </div>
-              <PriceChart id={asset.id} initialLive={asset.live} />
-            </>
-          )}
-          {tab === "info" && <InfoTab c={c} asset={asset ? { id: asset.id, name: asset.name } : null} mods={mods} />}
+      {tab === "layout" ? (
+        <section className="panel">
+          <h2>Arrange this page</h2>
+          <LayoutEditor
+            pages={[{ key: "community", schema: "community", label: c.label, previewHref: c.path }]}
+            layouts={{ community: layout }}
+            save={saveCommunityLayout.bind(null, c.id)}
+            resetLabel="Use the standard layout"
+          />
         </section>
-        <aside className="panel community-side">
-          <h2>About</h2>
-          <p className="small">{c.description ?? `The ${c.label} community: ideas, analysis and questions about ${c.title}.`}</p>
-          {c.rules && (
-            <>
-              <h3 className="small-head">Community rules</h3>
-              <ol className="small rules-list">
-                {c.rules
-                  .split("\n")
-                  .map((r) => r.trim())
-                  .filter(Boolean)
-                  .map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-              </ol>
-            </>
-          )}
-          <p className="small muted">
-            Plus the <Link href="/rules">site rules</Link>. Ask a bot: <code>@pricebot</code>, <code>@riskbot</code>,{" "}
-            <code>@pulsebot</code>.
-          </p>
-          {role === "mod" && !me?.canModerate && (
-            <p className="small notice">
-              You moderate this community. Turn on <Link href="/account#two-factor">two-factor login</Link> to edit it
-              and remove posts.
-            </p>
-          )}
-          {(me?.canModerate || isAdmin(viewer)) && (
-            <CommunityEditForm
-              community={{ id: c.id, slug: c.slug, title: c.title, description: c.description, rules: c.rules }}
-              isAdmin={isAdmin(viewer)}
-            />
-          )}
-        </aside>
-      </div>
+      ) : (
+        <>
+          <BlockList blocks={layout.top} ctx={ctx} />
+
+          <nav className="tabs community-tabs" aria-label="Community">
+            {(Object.keys(TABS) as (keyof typeof TABS)[])
+              .filter((t) => t !== "chart" || c.assetId)
+              .map((t) => (
+                <Link key={t} href={t === "forum" ? c.path : `${c.path}?tab=${t}`} aria-current={tab === t ? "page" : undefined}>
+                  {TABS[t]}
+                </Link>
+              ))}
+          </nav>
+
+          <div className={`forum-cols${(layout.side ?? []).length === 0 && !me?.canModerate && !isAdmin(viewer) ? " no-side" : ""}`}>
+            <section>
+              {(layout.main ?? []).map((block) =>
+                block.type === "posts" ? (
+                  <div key={block.id} className="community-posts">
+                    {tab === "forum" && (
+                      <ForumTab c={c} me={me} sort={sort} window={window} page={page} viewerId={viewer?.id} flair={isFlair(sp.flair) ? sp.flair : null} />
+                    )}
+                    {tab === "chat" && <ChatRoom room={chatRoomFor(c)} title={`${c.label} chat`} tall />}
+                    {tab === "chart" && asset && (
+                      <>
+                        {asset.assetClass === "stock" ? <StockHeader asset={asset} /> : asset.assetClass === "forex" ? <ForexHeader asset={asset} /> : <CoinHeader asset={asset} />}
+                        <div className="coin-actions">
+                          <WatchButton assetId={asset.id} name={asset.name} initial={watched} signedIn={!!viewer} />
+                          <Link href={`/alerts?coin=${asset.id}`} className="btn secondary small">
+                            🔔 Price alert
+                          </Link>
+                          {asset.assetClass !== "forex" && (
+                            <Link href={`/portfolio?add=${asset.id}`} className="btn secondary small">
+                              + Add to portfolio
+                            </Link>
+                          )}
+                          <Link href="/what-if" className="btn secondary small">
+                            What if…
+                          </Link>
+                        </div>
+                        <PriceChart id={asset.id} initialLive={asset.live} />
+                      </>
+                    )}
+                    {tab === "info" && <InfoTab c={c} asset={asset ? { id: asset.id, name: asset.name } : null} mods={mods} />}
+                  </div>
+                ) : (
+                  <BlockList key={block.id} blocks={[block]} ctx={ctx} />
+                ),
+              )}
+            </section>
+            <aside className="community-side">
+              <BlockList blocks={layout.side} ctx={ctx} boxed />
+              {role === "mod" && !me?.canModerate && (
+                <p className="small notice">
+                  You moderate this community. Turn on <Link href="/account#two-factor">two-factor login</Link> to edit it
+                  and remove posts.
+                </p>
+              )}
+              {(me?.canModerate || isAdmin(viewer)) && (
+                <div className="panel">
+                  <CommunityEditForm
+                    community={{ id: c.id, slug: c.slug, title: c.title, description: c.description, rules: c.rules }}
+                    isAdmin={isAdmin(viewer)}
+                  />
+                </div>
+              )}
+            </aside>
+          </div>
+        </>
+      )}
     </div>
   );
+}
+
+const blocksOf = (layout: TemplateLayout, type: Block["type"]) => Object.values(layout).flatMap((l) => l.filter((b) => b.type === type));
+
+interface SideCtx {
+  c: Community;
+  mood: { bulls: number; bears: number };
+  mods: { id: string; name: string }[];
+  asset: Awaited<ReturnType<typeof getAsset>>;
+  tab: Tab;
+  trending: TrendingTicker[];
+  popular: Community[];
+  leaders: Leader[];
+}
+
+/** The creator's blocks for one region of the community page. `boxed` puts each in a panel. */
+function BlockList({ blocks, ctx, boxed = false }: { blocks: Block[] | undefined; ctx: SideCtx; boxed?: boolean }) {
+  return (
+    <>
+      {(blocks ?? []).map((block) => {
+        const body = communityBlock(block, ctx);
+        if (body == null) return null;
+        return boxed ? (
+          <section key={block.id} className="panel community-block">
+            {body}
+          </section>
+        ) : (
+          <div key={block.id} className="community-block">
+            {body}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function communityBlock(block: Block, { c, mood, mods, asset, tab, trending, popular, leaders }: SideCtx): React.ReactNode {
+  const h = block.title ? <h2>{block.title}</h2> : null;
+  const n = block.limit ?? 10;
+  switch (block.type) {
+    case "sentiment":
+      return <Sentiment bulls={mood.bulls} bears={mood.bears} />;
+    case "about":
+      return (
+        <>
+          {h}
+          <p className="small">{c.description ?? `The ${c.label} community: ideas, analysis and questions about ${c.title}.`}</p>
+        </>
+      );
+    case "rules":
+      return (
+        <>
+          {h}
+          {c.rules && (
+            <ol className="small rules-list">
+              {c.rules
+                .split("\n")
+                .map((r) => r.trim())
+                .filter(Boolean)
+                .map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+            </ol>
+          )}
+          <p className="small muted">
+            {c.rules ? "Plus the " : "The "}
+            <Link href="/rules">site rules</Link> apply.
+          </p>
+        </>
+      );
+    case "bots":
+      return (
+        <p className="small muted">
+          Ask a bot: <code>@pricebot</code>, <code>@riskbot</code>, <code>@pulsebot</code>.
+        </p>
+      );
+    case "price":
+      if (!asset) return null;
+      return (
+        <>
+          {h}
+          <MiniMarket rows={[asset]} />
+        </>
+      );
+    case "chart":
+      if (!asset || tab === "chart") return null;
+      return (
+        <>
+          {h}
+          <PriceChart id={asset.id} initialLive={asset.live} />
+        </>
+      );
+    case "chat":
+      if (tab === "chat") return null;
+      return (
+        <>
+          {h}
+          <ChatRoom room={chatRoomFor(c)} title={block.title || `${c.label} chat`} />
+        </>
+      );
+    case "mods":
+      return (
+        <>
+          {h}
+          <p className="small">
+            {mods.length === 0
+              ? "Run by midbig staff."
+              : mods.map((m, i) => (
+                  <span key={m.id}>
+                    {i > 0 && ", "}
+                    <Link href={profilePath(m.name)}>{m.name}</Link>
+                  </span>
+                ))}
+          </p>
+        </>
+      );
+    case "text":
+      return (
+        <div className="home-note">
+          {h}
+          {block.text && block.text.split("\n\n").map((para, i) => <p key={i}>{para}</p>)}
+        </div>
+      );
+    case "trending":
+      return (
+        <>
+          {h}
+          {trending.length === 0 ? (
+            <p className="muted small">No tickers tagged today yet.</p>
+          ) : (
+            <ol className="trending">
+              {trending.slice(0, n).map((t) => (
+                <li key={t.symbol}>
+                  <Link href={t.href} className="ticker-tag">
+                    ${t.symbol}
+                  </Link>{" "}
+                  <span className="muted small">{t.posts} posts</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
+      );
+    case "popularCommunities":
+      return (
+        <>
+          {h}
+          <ul className="community-mini">
+            {popular
+              .filter((p) => p.id !== c.id)
+              .slice(0, n)
+              .map((p) => (
+                <li key={p.id}>
+                  <Link href={p.path}>{p.label}</Link> <span className="muted small">{p.memberCount.toLocaleString("en-US")}</span>
+                </li>
+              ))}
+          </ul>
+        </>
+      );
+    case "leaders":
+      return (
+        <>
+          {h}
+          {leaders.length === 0 ? (
+            <p className="muted small">Upvote useful posts and their authors show up here.</p>
+          ) : (
+            <ol className="leaders">
+              {leaders.slice(0, n).map((m) => (
+                <li key={m.id}>
+                  <Link href={profilePath(m.name)}>
+                    <Avatar name={m.name} src={m.avatar} size={22} /> {m.name}
+                  </Link>{" "}
+                  <span className="muted small">+{m.points}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
+      );
+    default:
+      return null;
+  }
 }
 
 async function ForumTab({

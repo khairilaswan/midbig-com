@@ -13,6 +13,7 @@ import {
   adminCreateBot,
   adminCreateDefaults,
   adminSetCategory,
+  adminSetLayoutEditing,
   adminUpdateBot,
   adminRemovePhotos,
   adminVerify,
@@ -233,5 +234,30 @@ export function BotForm({
         {msg && <span className="small muted">{msg}</span>}
       </p>
     </form>
+  );
+}
+
+export function LayoutSwitches({ editing }: { editing: { members: boolean; communities: boolean } }) {
+  const { run, pending, msg } = useAction();
+  const rows = [
+    ["members", "Members can arrange their own home page", "Off: everyone sees the site's layout, and saved arrangements are kept for later."],
+    ["communities", "Community creators can arrange their community's page", "Off: creators can't change it. Pages they already arranged keep their layout. Admins can always edit."],
+  ] as const;
+  return (
+    <div>
+      <ul className="toggles">
+        {rows.map(([k, label, hint]) => (
+          <li key={k}>
+            <label className="switch">
+              <input type="checkbox" checked={editing[k]} disabled={pending} onChange={(e) => run(() => adminSetLayoutEditing(k, e.target.checked), "Saved.")} />
+              <span>{label}</span>
+              <span className={`small ${editing[k] ? "up-text" : "muted"}`}>{editing[k] ? "On" : "Off"}</span>
+            </label>
+            <p className="small muted">{hint}</p>
+          </li>
+        ))}
+      </ul>
+      {msg && <p className="small">{msg}</p>}
+    </div>
   );
 }
